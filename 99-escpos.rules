@@ -1,0 +1,4 @@
+# Grants non-root users raw USB access to the GDMicroelectronics YC Printer (28e9:0289).
+# If you change printers, update the ids below (lsusb), then:
+#   sudo cp 99-escpos.rules /etc/udev/rules.d/ && sudo udevadm control --reload && sudo udevadm trigger
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28e9", ATTRS{idProduct}=="0289", MODE="0660", GROUP="lp", TAG+="uaccess"

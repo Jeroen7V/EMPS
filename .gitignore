@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Build artifacts
+build/
+dist/
+
+# Environments
+.env
+
+# Editors and IDEs
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# Local runtime artifacts
+*.log
+escpos-output.bin

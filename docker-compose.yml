@@ -1,0 +1,53 @@
+# Robust setup for the markdown ESC/POS printer service.
+#
+#   docker compose up -d
+#
+# Key robustness choices:
+# - devices: the whole /dev/bus/usb bus is passed through, so replugging the
+#   printer (which changes its device node number) does not break the setup
+#   and does not require editing this file.
+# - restart: unless-stopped: container survives reboots and crashes.
+# - healthcheck: uvicorn liveness via GET /health; Docker restarts the
+#   container if it turns unhealthy (needs autoheal or restart on unhealthy
+#   via an orchestrator; plain docker compose logs the status).
+# - logging: capped json-file rotation so the service cannot fill the disk.
+# - environment: all tunables are explicit, matching the connected printer
+#   (GDMicroelectronics YC Printer 28e9:0289, 58 mm paper).
+
+services:
+  escpos-printer:
+    build: .
+    image: markdown-escpos-printer:latest
+    container_name: escpos-printer
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    environment:
+      PRINTER_BACKEND: usb
+      USB_VENDOR_ID: "0x28e9"
+      USB_PRODUCT_ID: "0x0289"
+      PAPER_WIDTH_CHARS: "32"          # 58 mm paper; use "48" for 80 mm
+      # PRINTER_BACKEND: file          # dry-run alternative: writes bytes to
+      # PRINTER_OUTPUT_FILE: /tmp/escpos.bin   # /tmp/escpos.bin inside the container
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health').status == 200 else 1)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 10s
