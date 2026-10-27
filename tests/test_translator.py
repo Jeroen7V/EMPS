@@ -19,9 +19,15 @@ from emps.translator import (
     _BOLD_ON,
     _CUT_PARTIAL,
     _INIT,
+    _ITALIC_OFF,
+    _ITALIC_ON,
+    _REVERSE_OFF,
+    _REVERSE_ON,
     _SIZE_DOUBLE_BOTH,
     _SIZE_DOUBLE_HEIGHT,
     _SIZE_NORMAL,
+    _UNDERLINE_OFF,
+    _UNDERLINE_ON,
     MarkdownToEscpos,
 )
 
@@ -36,6 +42,12 @@ def visible(data: bytes) -> str:
         data.replace(_INIT, b"")
         .replace(_BOLD_ON, b"")
         .replace(_BOLD_OFF, b"")
+        .replace(_ITALIC_ON, b"")
+        .replace(_ITALIC_OFF, b"")
+        .replace(_UNDERLINE_ON, b"")
+        .replace(_UNDERLINE_OFF, b"")
+        .replace(_REVERSE_ON, b"")
+        .replace(_REVERSE_OFF, b"")
         .replace(_SIZE_DOUBLE_BOTH, b"")
         .replace(_SIZE_DOUBLE_HEIGHT, b"")
         .replace(_SIZE_NORMAL, b"")
@@ -83,8 +95,26 @@ class TestInline:
         assert _BOLD_ON + b"bold" in data
         assert _BOLD_OFF + b"text" in data  # unbolded before the next word
 
-    def test_italic_passes_through(self):
-        assert b"side" in make().translate("a *side* here\n")
+    def test_italic(self):
+        data = make().translate("a *side* here\n")
+        assert _ITALIC_ON + b"side" in data
+        assert _ITALIC_OFF + b"here" in data
+
+    def test_underline_html_tag(self):
+        data = make().translate("a <u>line</u> here\n")
+        assert _UNDERLINE_ON + b"line" in data
+        assert _UNDERLINE_OFF + b"here" in data
+
+    def test_strikethrough_reverse_video(self):
+        data = make().translate("a ~~gone~~ here\n")
+        assert _REVERSE_ON + b"gone" in data
+        assert _REVERSE_OFF + b"here" in data
+
+    def test_combined_styles(self):
+        data = make().translate("**bold *and italic***\n")
+        assert _BOLD_ON + b"bold" in data
+        assert _ITALIC_ON + b"and" in data  # italic turns on while bold is on
+        assert _BOLD_OFF + _ITALIC_OFF in data  # both off at line end
 
     def test_codespan_text_is_printed(self):
         assert b"extra" in make().translate("order `extra`\n")

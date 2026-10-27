@@ -114,9 +114,11 @@ For quick manual printing:
 
 ## Markdown subset supported by the service
 
-Headings (`#`, `##`, `###`), bold, lists (ordered/unordered/nested), task
-list checkboxes (`- [ ]` / `- [x]`), block quotes, fenced code blocks, and
-`---` separators. Paper is 58 mm (32 columns); text wraps automatically.
+Headings (`#`, `##`, `###`), bold, italic, `<u>underline</u>` (inline HTML),
+`~~strikethrough~~` (printed as reverse video), lists
+(ordered/unordered/nested), task list checkboxes (`- [ ]` / `- [x]`), block
+quotes, fenced code blocks, and `---` separators. Paper is 58 mm (32
+columns); text wraps automatically.
 
 ## Practical notes
 
