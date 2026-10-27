@@ -117,7 +117,8 @@ For quick manual printing:
 Headings (`#`, `##`, `###`), bold, italic, `<u>underline</u>` (inline HTML),
 `~~strikethrough~~` (printed as reverse video), lists
 (ordered/unordered/nested), task list checkboxes (`- [ ]` / `- [x]`), block
-quotes, fenced code blocks, and `---` separators. Paper is 58 mm (32
+quotes, and fenced code blocks (both printed white-on-black), and
+`---` separators. Paper is 58 mm (32
 columns); text wraps automatically.
 
 ## Practical notes

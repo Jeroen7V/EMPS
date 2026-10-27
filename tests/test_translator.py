@@ -110,6 +110,15 @@ class TestInline:
         assert _REVERSE_ON + b"gone" in data
         assert _REVERSE_OFF + b"here" in data
 
+    def test_codespan_reverse_video(self):
+        data = make().translate("order `extra` now\n")
+        assert _REVERSE_ON + b"extra" in data
+        assert _REVERSE_OFF + b"now" in data
+
+    def test_code_block_reverse_video(self):
+        data = make().translate("```\necho hi\n```\n")
+        assert _REVERSE_ON + b"echo hi" + _REVERSE_OFF in data
+
     def test_combined_styles(self):
         data = make().translate("**bold *and italic***\n")
         assert _BOLD_ON + b"bold" in data

@@ -74,7 +74,7 @@ failed print does not flip Docker's healthcheck unhealthy.
 | `*italic*` | ESC 4 / ESC 5 italic on/off |
 | `<u>underline</u>` | ESC - underline on/off |
 | `~~struck~~` | GS B reverse video on/off (ESC/POS has no native strikethrough) |
-| `` `code` `` and fenced blocks | indented 2 spaces, monospace |
+| `` `code` `` and fenced blocks | indented 2 spaces, reverse video (white on black) |
 | `- item` / `1. item` | `* ` / numbered, hanging indent, nesting supported |
 | `- [ ]` / `- [x]` (task list) | `[ ]` / `[x]` checkbox markers |
 | `> quote` | `> ` prefix per line |

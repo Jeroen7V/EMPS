@@ -62,13 +62,13 @@ _LIST_INDENT = "  "
 _BOLD = 1
 _ITALIC = 2
 _UNDERLINE = 4
-_STRIKETHROUGH = 8
+_REVERSE = 8  # strikethrough and code print white-on-black
 
 _STYLE_COMMANDS = {
     _BOLD: (_BOLD_ON, _BOLD_OFF),
     _ITALIC: (_ITALIC_ON, _ITALIC_OFF),
     _UNDERLINE: (_UNDERLINE_ON, _UNDERLINE_OFF),
-    _STRIKETHROUGH: (_REVERSE_ON, _REVERSE_OFF),
+    _REVERSE: (_REVERSE_ON, _REVERSE_OFF),
 }
 
 
@@ -168,7 +168,7 @@ class MarkdownToEscpos:
 
     def _code_block(self, token: dict, out: bytearray) -> None:
         for line in token["raw"].rstrip("\n").split("\n"):
-            self._emit_line([(line, False, False)], out, _CODE_INDENT)
+            self._emit_line([(line, _REVERSE, False)], out, _CODE_INDENT)
 
     def _separator(self, out: bytearray) -> None:
         out += self._enc("-" * self.width) + b"\n"
@@ -177,14 +177,17 @@ class MarkdownToEscpos:
 
     def _inline(self, children: list[dict]) -> list[tuple[str, int]]:
         """Flatten inline tokens to (text, style) segments with a style
-        bitmask (bold/italic/underline/strikethrough). Links print their text
-        only; <u>/</u> inline HTML toggles underline."""
+        bitmask (bold/italic/underline/reverse; strikethrough and code use
+        reverse video). Links print their text only; <u>/</u> inline HTML
+        toggles underline."""
         segments: list[tuple[str, int]] = []
         underline = False
         for token in children:
             kind = token["type"]
-            if kind in ("text", "codespan"):
+            if kind == "text":
                 segments.append((token["raw"], _UNDERLINE if underline else 0))
+            elif kind == "codespan":
+                segments.append((token["raw"], _REVERSE | (_UNDERLINE if underline else 0)))
             elif kind == "inline_html":
                 raw = token["raw"].strip().lower()
                 if raw == "<u>":
@@ -199,7 +202,7 @@ class MarkdownToEscpos:
                     segments.append((text, style | _ITALIC))
             elif kind == "strikethrough":
                 for text, style in self._inline(token["children"]):
-                    segments.append((text, style | _STRIKETHROUGH))
+                    segments.append((text, style | _REVERSE))
             elif kind == "link":
                 segments.extend(self._inline(token["children"]))
             elif kind == "linebreak":
