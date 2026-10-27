@@ -172,3 +172,18 @@ docker compose ps          # shows health status
 docker compose logs -f     # follow logs
 docker compose down        # stop
 ```
+
+## CI and registry
+
+`.github/workflows/docker.yml` runs the test suite, then builds the image
+for `linux/amd64` and `linux/arm64` and pushes it to
+`ghcr.io/<github-owner>/<repo>` on every push to `main` and on `v*` tags
+(PR builds are built but not pushed). Tagged versions produce `v1.2.3` and
+`1.2` style tags plus `latest` on the default branch. The built-in
+`GITHUB_TOKEN` is used - no extra secrets required; the repository needs
+"Packages: write" workflow permission, which the workflow requests
+explicitly. Pull the published image with:
+
+```bash
+docker pull ghcr.io/<github-owner>/<repo>:latest
+```

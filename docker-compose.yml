@@ -17,6 +17,8 @@
 services:
   escpos-printer:
     build: .
+    # Or pull the CI-built image instead of building locally:
+    # image: ghcr.io/<github-owner>/<repo>:latest
     image: markdown-escpos-printer:latest
     container_name: escpos-printer
     restart: unless-stopped
