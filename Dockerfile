@@ -7,17 +7,17 @@ RUN apt-get update \
 
 WORKDIR /app
 
-LABEL org.opencontainers.image.title="markdown-escpos-printer" \
+LABEL org.opencontainers.image.title="ESCPOS Markdown Printing Service (EMPS)" \
       org.opencontainers.image.description="HTTP service that translates markdown to ESC/POS and prints it on a USB receipt printer" \
       org.opencontainers.image.licenses="GPL-3.0-or-later" \
       org.opencontainers.image.authors="Jeroen Vermeylen <jeroen@fork-it.be>"
 
 COPY pyproject.toml ./
-COPY printer_service ./printer_service
+COPY emps ./emps
 RUN pip install --no-cache-dir .
 
 ENV PRINTER_BACKEND=usb
 
 EXPOSE 8000
 
-CMD ["uvicorn", "printer_service.api:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "emps.api:app", "--host", "0.0.0.0", "--port", "8000"]

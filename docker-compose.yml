@@ -1,4 +1,4 @@
-# Robust setup for the markdown ESC/POS printer service.
+# Robust setup for the ESCPOS Markdown Printing Service (EMPS).
 #
 #   docker compose up -d
 #
@@ -15,12 +15,12 @@
 #   (GDMicroelectronics YC Printer 28e9:0289, 58 mm paper).
 
 services:
-  escpos-printer:
+  emps:
     build: .
     # Or pull the CI-built image instead of building locally:
     # image: ghcr.io/<github-owner>/<repo>:latest
-    image: markdown-escpos-printer:latest
-    container_name: escpos-printer
+    image: emps:latest
+    container_name: emps
     restart: unless-stopped
     ports:
       - "8000:8000"

@@ -73,7 +73,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           annotations: |
-            org.opencontainers.image.title=markdown-escpos-printer
+            org.opencontainers.image.title=ESCPOS Markdown Printing Service (EMPS)
             org.opencontainers.image.description=HTTP service that translates markdown to ESC/POS and prints it on a USB receipt printer
             org.opencontainers.image.licenses=GPL-3.0-or-later
           cache-from: type=gha

@@ -1,5 +1,5 @@
-# markdown-escpos-printer: HTTP service that prints markdown on a USB
-# ESC/POS receipt printer.
+# ESCPOS Markdown Printing Service (EMPS): HTTP service that translates
+# markdown to ESC/POS and prints it on a USB receipt printer.
 # Copyright (C) 2026 Jeroen Vermeylen
 #
 # This program is free software: you can redistribute it and/or modify
@@ -14,7 +14,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
-from printer_service.translator import (
+from emps.translator import (
     _BOLD_OFF,
     _BOLD_ON,
     _CUT_PARTIAL,
