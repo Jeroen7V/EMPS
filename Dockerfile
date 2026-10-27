@@ -7,6 +7,11 @@ RUN apt-get update \
 
 WORKDIR /app
 
+LABEL org.opencontainers.image.title="markdown-escpos-printer" \
+      org.opencontainers.image.description="HTTP service that translates markdown to ESC/POS and prints it on a USB receipt printer" \
+      org.opencontainers.image.licenses="GPL-3.0-or-later" \
+      org.opencontainers.image.authors="Jeroen Vermeylen <jeroen@fork-it.be>"
+
 COPY pyproject.toml ./
 COPY printer_service ./printer_service
 RUN pip install --no-cache-dir .
