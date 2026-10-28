@@ -326,6 +326,9 @@ Notes:
   install (2026.11+), classic HACS install, YAML-only fallback — with the
   existing script examples ported to `emps.print_markdown` action calls
   (simpler: no `rest_command`, no `to_json` escaping).
+- **README restructuring** (part of this phase, see 3.3.1): slim the README
+  down to a general overview + quick-start pointers, move detailed
+  documentation into `docs/`.
 
 **Phase 4 — tests + validation (~1 day)**
 - `pytest-homeassistant-custom-component` suite: config flow (success,
@@ -377,7 +380,42 @@ Small, backward-compatible additions to the service, each optional:
    integration can set the device's sw_version.
 3. *(Defer)* CORS/webhook needs: none; HA is a plain LAN client.
 
-### 3.4 Open decisions
+### 3.3.1 README / documentation restructuring
+
+Target documentation layout when the integration ships:
+
+```
+README.md                  # general overview only
+docs/
+  home-assistant.md        # HA integration: Marketplace/HACS/YAML installs, usage
+  deployment.md           # (moved from README) service setup: env, Docker, udev, USB
+  api.md                  # (moved from README) endpoints, payload limits, error codes,
+                          #  markdown->ESC/POS mapping table
+  ha-integration-plan.md   # this plan (historical, or retired after implementation)
+```
+
+**README.md keeps** (short, link-heavy):
+
+- One-paragraph "what is EMPS": a FastAPI service that turns markdown into
+  ESC/POS and prints it on a USB thermal printer, plus a Home Assistant
+  integration for it.
+- A two-column overview of the two components (service / HA integration)
+  with pointers to their respective docs.
+- Quick start: install/run the service in a few commands, and the one-line
+  "install via Settings > Marketplace" path for HA.
+- Links into `docs/` for everything detailed (endpoint reference, markdown
+  mapping, HA setup recipes, deployment/udev notes).
+
+**Moved out of the README** (into `docs/` files above): the full
+markdown→ESC/POS mapping table, the endpoint/response/error documentation,
+Docker Compose / udev / USB configuration detail, and the long usage
+examples. The README should answer "what is this and how do I get started"
+  in one screen; `docs/` holds the rest.
+
+Do this restructuring in the same PR/phase as the integration docs so the
+Marketplace-facing README (which HACS renders) stays short and points users
+to the right places, instead of growing ESC/POS service detail that
+integration-only users don't need.
 
 - Allow multiple config entries (multiple printers)? Plan says yes via
   uniqueness on `(host, port)`; decide whether service actions target entries
@@ -393,6 +431,6 @@ Small, backward-compatible additions to the service, each optional:
 | M0 scaffold | `hacs/action` and hassfest pass in CI; integration loads in dev HA |
 | M1 setup | UI flow creates entry against a file-backend EMPS; reload/unload clean |
 | M2 actions | `emps.print_markdown` prints via UI Action call; sensors reflect status |
-| M3 docs+polish | docs rewritten; diagnostics + options flow work; translations load |
+| M3 docs+polish | README slimmed to overview + quick start; detailed docs in `docs/`; diagnostics + options flow work; translations load |
 | M4 tests | HA test suite green on min + latest supported HA versions |
 | M5 publish | Listed in Marketplace on 2026.11+; classic HACS install verified |
