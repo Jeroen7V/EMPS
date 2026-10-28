@@ -67,8 +67,8 @@ failed print does not flip Docker's healthcheck unhealthy.
 
 | Markdown | ESC/POS |
 |---|---|
-| `#` | double width + height, bold |
-| `##` | double height, bold |
+| `#` | double width + height, bold, centered |
+| `##` | double height, bold, centered |
 | `###`+ | bold, normal size |
 | `**bold**` | ESC E bold on/off |
 | `*italic*` | ESC 4 / ESC 5 italic on/off |
@@ -78,6 +78,7 @@ failed print does not flip Docker's healthcheck unhealthy.
 | `- item` / `1. item` | `* ` / numbered, hanging indent, nesting supported |
 | `- [ ]` / `- [x]` (task list) | `[ ]` / `[x]` checkbox markers |
 | `> quote` | `> ` prefix per line |
+| `[text](https://...)` | link text prints; URL also printed as a scannable QR code |
 | `---` | full-width dashed line |
 | end of document | 3 line feeds + partial cut |
 

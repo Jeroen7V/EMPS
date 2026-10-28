@@ -23,9 +23,10 @@ result can be sent verbatim to any ESC/POS printer:
 - ESC E n          bold on/off
 - ESC 4 / ESC 5    italic on/off
 - ESC - n          underline on/off
-- GS B n           reverse video on/off (used for strikethrough)
+- GS B n           reverse video on/off (used for strikethrough and code)
 - GS ! n           character size (width/height)
-- ESC a n          alignment (not used; everything is left-aligned)
+- ESC a n          alignment (headings are centered)
+- GS ( k fn 165+  QR code (http link URLs print as scannable codes)
 - GS V 66 n        partial cut with feed
 """
 
@@ -39,6 +40,8 @@ import mistune
 ESC = b"\x1b"
 GS = b"\x1d"
 
+_CENTER_ON = ESC + b"a\x01"
+_CENTER_OFF = ESC + b"a\x00"
 _BOLD_ON = ESC + b"E\x01"
 _BOLD_OFF = ESC + b"E\x00"
 _ITALIC_ON = ESC + b"4"
@@ -52,6 +55,14 @@ _SIZE_NORMAL = GS + b"!\x00"
 _SIZE_DOUBLE_HEIGHT = GS + b"!\x01"
 _SIZE_DOUBLE_BOTH = GS + b"!\x11"
 _CUT_PARTIAL = GS + b"V\x42\x00"
+
+_QR = GS + b"(k"  # QR code commands (ESC/POS function 165-182)
+
+
+def _qr_payload(data: bytes, fn: int, extra: bytes = b"") -> bytes:
+    """GS ( k payload: pL pH fn [m] [data]."""
+    body = bytes([fn]) + extra + data
+    return _QR + bytes([len(body) % 256, len(body) // 256]) + body
 
 _BULLET = "*"  # ASCII: this printer renders only the low code page reliably
 _CHECKBOX_ON = "[x] "
@@ -119,23 +130,47 @@ class MarkdownToEscpos:
         elif level == 2:
             out += _SIZE_DOUBLE_HEIGHT
         # force the heading text bold; double width halves the chars per line
-        segments = [(text, style | _BOLD) for text, style in self._inline(token["children"])]
+        qrs: list[str] = []
+        segments = [
+            (text, style | _BOLD) for text, style in self._inline(token["children"], qrs)
+        ]
         wrap_width = self.width // 2 if level == 1 else self.width
+        out += _CENTER_ON
         for line in self._wrap(segments, wrap_width):
             self._emit_line(line, out, "")
+        out += _CENTER_OFF
         if level <= 2:
             out += _SIZE_NORMAL
+        for url in qrs:
+            self._qr(out, url)
+
+    def _qr(self, out: bytearray, url: str) -> None:
+        data = url.encode(self.encoding, errors="replace")
+        if not data:
+            return
+        out += _qr_payload(b"", 165)  # model 2
+        out += _qr_payload(b"", 167, bytes([6]))  # module size 6
+        out += _qr_payload(b"", 169, bytes([48]))  # error correction M
+        out += _qr_payload(data, 180)  # store data
+        out += _qr_payload(b"", 181, (0).to_bytes(2, "little"))  # print
+        out += b"\n"
 
     def _paragraph(self, token: dict, out: bytearray) -> None:
-        self._emit_inline(token["children"], out)
+        qrs: list[str] = []
+        self._emit_inline(token["children"], out, qrs)
+        for url in qrs:
+            self._qr(out, url)
 
     def _quote(self, token: dict, out: bytearray) -> None:
         # block_quote children are block tokens (paragraph etc.)
         for child in token["children"]:
             if child["type"] in ("paragraph", "block_text"):
-                segments = self._inline(child["children"])
+                qrs: list[str] = []
+                segments = self._inline(child["children"], qrs)
                 for line in self._wrap(segments, self.width - 2, subsequent="  "):
                     self._emit_line(line, out, "> ")
+                for url in qrs:
+                    self._qr(out, url)
             elif child["type"] == "block_quote":
                 self._quote(child, out)
             else:
@@ -155,12 +190,15 @@ class MarkdownToEscpos:
             first = True
             for child in item["children"]:
                 if child["type"] in ("block_text", "paragraph"):
-                    segments = self._inline(child["children"])
+                    qrs: list[str] = []
+                    segments = self._inline(child["children"], qrs)
                     lines = self._wrap(segments, self.width, subsequent=marker_pad)
                     for i, line in enumerate(lines):
                         prefix = indent + marker if (i == 0 and first) else marker_pad
                         self._emit_line(line, out, prefix)
                         first = False
+                    for url in qrs:
+                        self._qr(out, url)
                 elif child["type"] == "list":
                     self._list(child, out, depth + 1)
                 else:
@@ -175,11 +213,12 @@ class MarkdownToEscpos:
 
     # ---------------------------------------------------------------- inline
 
-    def _inline(self, children: list[dict]) -> list[tuple[str, int]]:
+    def _inline(self, children: list[dict], qrs: list[str] | None = None) -> list[tuple[str, int]]:
         """Flatten inline tokens to (text, style) segments with a style
         bitmask (bold/italic/underline/reverse; strikethrough and code use
-        reverse video). Links print their text only; <u>/</u> inline HTML
-        toggles underline."""
+        reverse video). Links print their text only; http(s) link URLs are
+        collected into qrs for QR printing. <u>/</u> inline HTML toggles
+        underline."""
         segments: list[tuple[str, int]] = []
         underline = False
         for token in children:
@@ -195,24 +234,29 @@ class MarkdownToEscpos:
                 elif raw == "</u>":
                     underline = False
             elif kind == "strong":
-                for text, style in self._inline(token["children"]):
+                for text, style in self._inline(token["children"], qrs):
                     segments.append((text, style | _BOLD))
             elif kind == "emphasis":
-                for text, style in self._inline(token["children"]):
+                for text, style in self._inline(token["children"], qrs):
                     segments.append((text, style | _ITALIC))
             elif kind == "strikethrough":
-                for text, style in self._inline(token["children"]):
+                for text, style in self._inline(token["children"], qrs):
                     segments.append((text, style | _REVERSE))
             elif kind == "link":
-                segments.extend(self._inline(token["children"]))
+                url = token.get("attrs", {}).get("url", "")
+                if qrs is not None and re.match(r"https?://", url):
+                    qrs.append(url)
+                segments.extend(self._inline(token["children"], qrs))
             elif kind == "linebreak":
                 segments.append(("\n", 0))
             elif kind == "softbreak":
                 segments.append((" ", 0))
         return segments
 
-    def _emit_inline(self, children: list[dict], out: bytearray) -> None:
-        for line in self._wrap(self._inline(children), self.width):
+    def _emit_inline(
+        self, children: list[dict], out: bytearray, qrs: list[str] | None = None
+    ) -> None:
+        for line in self._wrap(self._inline(children, qrs), self.width):
             self._emit_line(line, out, "")
 
     def _emit_line(

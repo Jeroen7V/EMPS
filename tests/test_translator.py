@@ -17,6 +17,8 @@
 from emps.translator import (
     _BOLD_OFF,
     _BOLD_ON,
+    _CENTER_OFF,
+    _CENTER_ON,
     _CUT_PARTIAL,
     _INIT,
     _ITALIC_OFF,
@@ -40,6 +42,8 @@ def visible(data: bytes) -> str:
     """Decode with control sequences stripped, for readability assertions."""
     return (
         data.replace(_INIT, b"")
+        .replace(_CENTER_ON, b"")
+        .replace(_CENTER_OFF, b"")
         .replace(_BOLD_ON, b"")
         .replace(_BOLD_OFF, b"")
         .replace(_ITALIC_ON, b"")
@@ -72,6 +76,11 @@ class TestHeadings:
         data = make().translate("# Title\n")
         assert _SIZE_DOUBLE_BOTH in data
         assert b"Title" in data
+
+    def test_heading_is_centered(self):
+        data = make().translate("# Title\n")
+        assert _CENTER_ON in data and _CENTER_OFF in data
+        assert data.index(_CENTER_ON) < data.index(b"Title") < data.index(_CENTER_OFF)
 
     def test_h2_double_height(self):
         assert _SIZE_DOUBLE_HEIGHT in make().translate("## Sub\n")
@@ -130,7 +139,21 @@ class TestInline:
 
     def test_link_prints_text_not_url(self):
         data = make().translate("see [docs](https://example.com)\n")
-        assert b"docs" in data and b"https" not in data
+        # the printed line has the link text; the URL appears only in QR data
+        assert visible(data).splitlines()[0] == "see docs"
+        assert b"https://example.com" in data
+
+    def test_non_http_link_gets_no_qr(self):
+        data = make().translate("mail [me](mailto:a@b.c)\n")
+        assert b"(k" not in data
+
+    def test_qr_command_sequence(self):
+        from emps.translator import _qr_payload
+
+        data = make().translate("[x](http://e.com)\n")
+        assert _qr_payload(b"", 165) in data  # model 2
+        assert _qr_payload(b"http://e.com", 180) in data  # store data
+        assert _qr_payload(b"", 181, b"\x00\x00") in data  # print
 
     def test_spacing_is_preserved_between_styles(self):
         assert visible(make().translate("a *side*:\n")).strip() == "a side:"

@@ -114,8 +114,9 @@ For quick manual printing:
 
 ## Markdown subset supported by the service
 
-Headings (`#`, `##`, `###`), bold, italic, `<u>underline</u>` (inline HTML),
-`~~strikethrough~~` (printed as reverse video), lists
+Headings (`#`, `##`, `###` — centered), bold, italic, `<u>underline</u>` (inline HTML),
+`~~strikethrough~~` (printed as reverse video), http(s) links (printed as
+text plus a scannable QR code), lists
 (ordered/unordered/nested), task list checkboxes (`- [ ]` / `- [x]`), block
 quotes, and fenced code blocks (both printed white-on-black), and
 `---` separators. Paper is 58 mm (32
