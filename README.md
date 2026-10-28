@@ -80,8 +80,9 @@ failed print does not flip Docker's healthcheck unhealthy.
 | `**bold**` | ESC E bold on/off |
 | `*italic*` | ESC 4 / ESC 5 italic on/off |
 | `<u>underline</u>` | ESC - underline on/off |
-| `~~struck~~` | GS B reverse video on/off (ESC/POS has no native strikethrough) |
-| `` `code` `` and fenced blocks | indented 2 spaces, reverse video (white on black) |
+| `~~struck~~` | struck through with a dash overprint (ESC/POS has no native strikethrough) |
+| `` `code` `` | reverse video (white on black) |
+| fenced code blocks | full-width reverse video: every line is a black bar with white text |
 | `- item` / `1. item` | `* ` / numbered, hanging indent, nesting supported |
 | `- [ ]` / `- [x]` (task list) | `[ ]` / `[x]` checkbox markers |
 | `> quote` | `> ` prefix per line |
