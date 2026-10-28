@@ -1,0 +1,13 @@
+{
+  "domain": "emps",
+  "name": "EMPS",
+  "codeowners": ["@Jeroen7V"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/Jeroen7V/EMPS/blob/main/docs/home-assistant.md",
+  "integration_type": "service",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/Jeroen7V/EMPS/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}
