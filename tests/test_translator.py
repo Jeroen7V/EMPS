@@ -16,6 +16,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 from emps.translator import (
     _BOLD_OFF,
+    ESC,
     _BOLD_ON,
     _CENTER_OFF,
     _CENTER_ON,
@@ -153,9 +154,26 @@ class TestInline:
         from emps.translator import _qr_payload
 
         data = make().translate("[x](http://e.com)\n")
-        assert _qr_payload(b"", 165, b"\x32\x00") in data  # model 2
-        assert _qr_payload(b"http://e.com", 180, b"\x30") in data  # store data
-        assert _qr_payload(b"", 181, b"\x30") in data  # print
+        assert _qr_payload(b"", 65, b"\x32\x00") in data  # model 2
+        assert _qr_payload(b"http://e.com", 80, b"\x30") in data  # store data
+        assert _qr_payload(b"", 81, b"\x30") in data  # print
+
+    def test_qr_function_numbers_are_ascii(self):
+        # The printer expects GS ( k function numbers as ASCII ('A'..'Q');
+        # raw bytes 0xA5.. would be printed as text instead of executing.
+        from emps.translator import _qr_payload
+
+        data = make().translate("[x](http://e.com)\n")
+        assert _qr_payload(b"", 65, b"\x32\x00") in data
+        assert b"\xa5" not in data and b"\xb4" not in data
+
+    def test_strikethrough_uses_absolute_positioning(self):
+        from emps.translator import _absolute_pos, _DOTS_PER_CHAR
+
+        data = make().translate("a ~~gone~~ here\n")
+        # the dash overprint is placed with ESC $ at the struck word's column
+        assert _absolute_pos(2 * _DOTS_PER_CHAR) in data
+        assert ESC + b"\\" not in data
 
     def test_spacing_is_preserved_between_styles(self):
         assert visible(make().translate("a *side*:\n")).strip() == "a side:"

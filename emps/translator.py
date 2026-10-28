@@ -26,7 +26,7 @@ result can be sent verbatim to any ESC/POS printer:
 - GS B n           reverse video on/off (code; spans the full line width)
 - GS ! n           character size (width/height)
 - ESC a n          alignment (headings are centered)
-- ESC backslash     relative print position (strikethrough dash overprint)
+- ESC $ nL nH      absolute print position (strikethrough dash overprint)
 - GS ( k cn fn...  QR code (http link URLs print as scannable codes)
 - GS V 66 n        partial cut with feed
 """
@@ -57,7 +57,7 @@ _SIZE_DOUBLE_HEIGHT = GS + b"!\x01"
 _SIZE_DOUBLE_BOTH = GS + b"!\x11"
 _CUT_PARTIAL = GS + b"V\x42\x00"
 
-_QR = GS + b"(k"  # QR code commands (ESC/POS function 165-182)
+_QR = GS + b"(k"  # QR code commands (ESC/POS function 65-82)
 
 
 def _qr_payload(data: bytes, fn: int, extra: bytes = b"") -> bytes:
@@ -66,10 +66,9 @@ def _qr_payload(data: bytes, fn: int, extra: bytes = b"") -> bytes:
     return _QR + bytes([len(body) % 256, len(body) // 256]) + body
 
 
-def _relative_pos(dots: int) -> bytes:
-    """ESC backslash nL nH: move the print position by dots (negative left)."""
-    value = dots & 0xFFFF
-    return ESC + b"\\" + bytes([value & 0xFF, value >> 8])
+def _absolute_pos(dots: int) -> bytes:
+    """ESC $ nL nH: move the print position to dots from the left margin."""
+    return ESC + b"$" + bytes([dots % 256, dots // 256])
 
 _QR_CN = b"\x31"  # GS ( k code type 1 = QR code
 _BULLET = "*"  # ASCII: this printer renders only the low code page reliably
@@ -157,11 +156,11 @@ class MarkdownToEscpos:
         data = url.encode(self.encoding, errors="replace")
         if not data:
             return
-        out += _qr_payload(b"", 165, b"\x32\x00")  # model 2
-        out += _qr_payload(b"", 167, bytes([6]))  # module size 6
-        out += _qr_payload(b"", 169, bytes([49]))  # error correction M
-        out += _qr_payload(data, 180, b"\x30")  # store data
-        out += _qr_payload(b"", 181, b"\x30")  # print
+        out += _qr_payload(b"", 65, b"\x32\x00")  # model 2
+        out += _qr_payload(b"", 67, bytes([6]))  # module size 6
+        out += _qr_payload(b"", 69, bytes([49]))  # error correction M
+        out += _qr_payload(data, 80, b"\x30")  # store data
+        out += _qr_payload(b"", 81, b"\x30")  # print
         out += b"\n"
 
     def _paragraph(self, token: dict, out: bytearray) -> None:
@@ -306,10 +305,8 @@ class MarkdownToEscpos:
         if style_state:
             out += self._style_bytes(style_state, 0)
         for start, end in strike_runs:
-            out += _relative_pos(-(total - start) * _DOTS_PER_CHAR)
+            out += _absolute_pos(start * _DOTS_PER_CHAR)
             out += self._enc("-" * (end - start))
-            if total > end:
-                out += _relative_pos((total - end) * _DOTS_PER_CHAR)
         out += b"\n"
 
     @staticmethod

@@ -56,7 +56,7 @@ TEST_PAGE = """# EMPS Test Page
 
 **bold** *italic* <u>underline</u> ~~struck~~ and `code`
 
-**bold *italic* combined** ~~cut **bold***~~
+**bold *italic* combined** ~~cut **bold** here~~
 
 ## Structure
 

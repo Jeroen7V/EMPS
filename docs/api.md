@@ -63,7 +63,7 @@ status.
 | `**bold**` | ESC E bold on/off |
 | `*italic*` | ESC 4 italic on/off |
 | `<u>underline</u>` | ESC `-` underline on/off (inline HTML) |
-| `~~strikethrough~~` | dash overprint via ESC `\` relative positioning (ESC/POS has no native strikethrough) |
+| `~~strikethrough~~` | dash overprint via ESC `$` absolute positioning (ESC/POS has no native strikethrough) |
 | `` `code` `` | reverse video (white on black) |
 | fenced code blocks | full-width reverse video: every line is a black bar with white text |
 | http(s) links | printed as text plus a scannable QR code |
@@ -72,5 +72,8 @@ status.
 | `>` block quotes | indented |
 | `---` | full-width separator |
 
-Paper is 58 mm (32 columns) by default; text wraps automatically.
+Paper is 58 mm (32 columns) by default; text wraps automatically. Note that
+many 58 mm printers (e.g. the Goojprt PT-210) print only ~48 mm of the
+57/58 mm paper, so "full-width" bars and separators stop short of the paper
+edge — that is the printable area, not a formatting bug.
 See `emps/translator.py` for the authoritative implementation.
