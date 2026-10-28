@@ -1,0 +1,35 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Verbind met EMPS",
+        "description": "Geef het adres van de EMPS-printservice op.",
+        "data": {
+          "host": "Host",
+          "port": "Poort",
+          "token": "Bearer-token (optioneel, alleen als EMPS_AUTH_TOKEN is ingesteld)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Kan geen verbinding maken met de EMPS-service",
+      "invalid_auth": "Ongeldige of ontbrekende bearer-token"
+    },
+    "abort": {
+      "already_configured": "Deze EMPS-service is al geconfigureerd"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "EMPS-opties",
+        "data": {
+          "poll_interval": "Health-pollinterval in seconden (30-3600)"
+        }
+      }
+    },
+    "error": {
+      "invalid_poll_interval": "Pollinterval moet tussen 30 en 3600 seconden liggen"
+    }
+  }
+}

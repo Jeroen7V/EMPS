@@ -31,6 +31,7 @@ class Settings:
     usb_product_id: int = 0x0289
     backend: str = "file"  # "file" or "usb"
     file_backend_path: str = "/tmp/escpos-output.bin"
+    auth_token: str | None = None
 
 
 def load_settings() -> Settings:
@@ -40,4 +41,5 @@ def load_settings() -> Settings:
         usb_product_id=int(os.environ.get("USB_PRODUCT_ID", "0x0289"), 0),
         backend=os.environ.get("PRINTER_BACKEND", "file"),
         file_backend_path=os.environ.get("PRINTER_OUTPUT_FILE", "/tmp/escpos-output.bin"),
+        auth_token=os.environ.get("EMPS_AUTH_TOKEN") or None,
     )
