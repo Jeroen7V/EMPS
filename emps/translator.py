@@ -21,8 +21,12 @@ result can be sent verbatim to any ESC/POS printer:
 
 - ESC @            initialize
 - ESC E n          bold on/off
+- ESC 4 / ESC 5    italic on/off
+- ESC - n          underline on/off
+- GS B n           reverse video on/off (used for strikethrough and code)
 - GS ! n           character size (width/height)
-- ESC a n          alignment (not used; everything is left-aligned)
+- ESC a n          alignment (headings are centered)
+- GS ( k fn 165+  QR code (http link URLs print as scannable codes)
 - GS V 66 n        partial cut with feed
 """
 
@@ -36,13 +40,29 @@ import mistune
 ESC = b"\x1b"
 GS = b"\x1d"
 
+_CENTER_ON = ESC + b"a\x01"
+_CENTER_OFF = ESC + b"a\x00"
 _BOLD_ON = ESC + b"E\x01"
 _BOLD_OFF = ESC + b"E\x00"
+_ITALIC_ON = ESC + b"4"
+_ITALIC_OFF = ESC + b"5"
+_UNDERLINE_ON = ESC + b"-\x01"
+_UNDERLINE_OFF = ESC + b"-\x00"
+_REVERSE_ON = GS + b"B\x01"
+_REVERSE_OFF = GS + b"B\x00"
 _INIT = ESC + b"@"
 _SIZE_NORMAL = GS + b"!\x00"
 _SIZE_DOUBLE_HEIGHT = GS + b"!\x01"
 _SIZE_DOUBLE_BOTH = GS + b"!\x11"
 _CUT_PARTIAL = GS + b"V\x42\x00"
+
+_QR = GS + b"(k"  # QR code commands (ESC/POS function 165-182)
+
+
+def _qr_payload(data: bytes, fn: int, extra: bytes = b"") -> bytes:
+    """GS ( k payload: pL pH fn [m] [data]."""
+    body = bytes([fn]) + extra + data
+    return _QR + bytes([len(body) % 256, len(body) // 256]) + body
 
 _BULLET = "*"  # ASCII: this printer renders only the low code page reliably
 _CHECKBOX_ON = "[x] "
@@ -50,13 +70,25 @@ _CHECKBOX_OFF = "[ ] "
 _CODE_INDENT = "  "
 _LIST_INDENT = "  "
 
+_BOLD = 1
+_ITALIC = 2
+_UNDERLINE = 4
+_REVERSE = 8  # strikethrough and code print white-on-black
+
+_STYLE_COMMANDS = {
+    _BOLD: (_BOLD_ON, _BOLD_OFF),
+    _ITALIC: (_ITALIC_ON, _ITALIC_OFF),
+    _UNDERLINE: (_UNDERLINE_ON, _UNDERLINE_OFF),
+    _REVERSE: (_REVERSE_ON, _REVERSE_OFF),
+}
+
 
 class MarkdownToEscpos:
     def __init__(self, width: int = 32, encoding: str = "cp437", feed_lines: int = 3) -> None:
         self.width = width
         self.encoding = encoding
         self.feed_lines = feed_lines
-        self._md = mistune.create_markdown(renderer=None, plugins=["task_lists"])
+        self._md = mistune.create_markdown(renderer=None, plugins=["task_lists", "strikethrough"])
 
     # ------------------------------------------------------------------ API
 
@@ -98,23 +130,47 @@ class MarkdownToEscpos:
         elif level == 2:
             out += _SIZE_DOUBLE_HEIGHT
         # force the heading text bold; double width halves the chars per line
-        segments = [(text, True) for text, _ in self._inline(token["children"])]
+        qrs: list[str] = []
+        segments = [
+            (text, style | _BOLD) for text, style in self._inline(token["children"], qrs)
+        ]
         wrap_width = self.width // 2 if level == 1 else self.width
+        out += _CENTER_ON
         for line in self._wrap(segments, wrap_width):
             self._emit_line(line, out, "")
+        out += _CENTER_OFF
         if level <= 2:
             out += _SIZE_NORMAL
+        for url in qrs:
+            self._qr(out, url)
+
+    def _qr(self, out: bytearray, url: str) -> None:
+        data = url.encode(self.encoding, errors="replace")
+        if not data:
+            return
+        out += _qr_payload(b"", 165)  # model 2
+        out += _qr_payload(b"", 167, bytes([6]))  # module size 6
+        out += _qr_payload(b"", 169, bytes([48]))  # error correction M
+        out += _qr_payload(data, 180)  # store data
+        out += _qr_payload(b"", 181, (0).to_bytes(2, "little"))  # print
+        out += b"\n"
 
     def _paragraph(self, token: dict, out: bytearray) -> None:
-        self._emit_inline(token["children"], out)
+        qrs: list[str] = []
+        self._emit_inline(token["children"], out, qrs)
+        for url in qrs:
+            self._qr(out, url)
 
     def _quote(self, token: dict, out: bytearray) -> None:
         # block_quote children are block tokens (paragraph etc.)
         for child in token["children"]:
             if child["type"] in ("paragraph", "block_text"):
-                segments = self._inline(child["children"])
+                qrs: list[str] = []
+                segments = self._inline(child["children"], qrs)
                 for line in self._wrap(segments, self.width - 2, subsequent="  "):
                     self._emit_line(line, out, "> ")
+                for url in qrs:
+                    self._qr(out, url)
             elif child["type"] == "block_quote":
                 self._quote(child, out)
             else:
@@ -134,12 +190,15 @@ class MarkdownToEscpos:
             first = True
             for child in item["children"]:
                 if child["type"] in ("block_text", "paragraph"):
-                    segments = self._inline(child["children"])
+                    qrs: list[str] = []
+                    segments = self._inline(child["children"], qrs)
                     lines = self._wrap(segments, self.width, subsequent=marker_pad)
                     for i, line in enumerate(lines):
                         prefix = indent + marker if (i == 0 and first) else marker_pad
                         self._emit_line(line, out, prefix)
                         first = False
+                    for url in qrs:
+                        self._qr(out, url)
                 elif child["type"] == "list":
                     self._list(child, out, depth + 1)
                 else:
@@ -147,55 +206,89 @@ class MarkdownToEscpos:
 
     def _code_block(self, token: dict, out: bytearray) -> None:
         for line in token["raw"].rstrip("\n").split("\n"):
-            self._emit_line([(line, False, False)], out, _CODE_INDENT)
+            self._emit_line([(line, _REVERSE, False)], out, _CODE_INDENT)
 
     def _separator(self, out: bytearray) -> None:
         out += self._enc("-" * self.width) + b"\n"
 
     # ---------------------------------------------------------------- inline
 
-    def _inline(self, children: list[dict]) -> list[tuple[str, bool]]:
-        """Flatten inline tokens to (text, bold) segments. Links print their
-        text only; emphasis is passed through unchanged."""
-        segments: list[tuple[str, bool]] = []
+    def _inline(self, children: list[dict], qrs: list[str] | None = None) -> list[tuple[str, int]]:
+        """Flatten inline tokens to (text, style) segments with a style
+        bitmask (bold/italic/underline/reverse; strikethrough and code use
+        reverse video). Links print their text only; http(s) link URLs are
+        collected into qrs for QR printing. <u>/</u> inline HTML toggles
+        underline."""
+        segments: list[tuple[str, int]] = []
+        underline = False
         for token in children:
             kind = token["type"]
-            if kind in ("text", "codespan"):
-                segments.append((token["raw"], False))
+            if kind == "text":
+                segments.append((token["raw"], _UNDERLINE if underline else 0))
+            elif kind == "codespan":
+                segments.append((token["raw"], _REVERSE | (_UNDERLINE if underline else 0)))
+            elif kind == "inline_html":
+                raw = token["raw"].strip().lower()
+                if raw == "<u>":
+                    underline = True
+                elif raw == "</u>":
+                    underline = False
             elif kind == "strong":
-                for text, bold in self._inline(token["children"]):
-                    segments.append((text, True))
-            elif kind in ("emphasis", "link"):
-                segments.extend(self._inline(token["children"]))
+                for text, style in self._inline(token["children"], qrs):
+                    segments.append((text, style | _BOLD))
+            elif kind == "emphasis":
+                for text, style in self._inline(token["children"], qrs):
+                    segments.append((text, style | _ITALIC))
+            elif kind == "strikethrough":
+                for text, style in self._inline(token["children"], qrs):
+                    segments.append((text, style | _REVERSE))
+            elif kind == "link":
+                url = token.get("attrs", {}).get("url", "")
+                if qrs is not None and re.match(r"https?://", url):
+                    qrs.append(url)
+                segments.extend(self._inline(token["children"], qrs))
             elif kind == "linebreak":
-                segments.append(("\n", False))
+                segments.append(("\n", 0))
             elif kind == "softbreak":
-                segments.append((" ", False))
+                segments.append((" ", 0))
         return segments
 
-    def _emit_inline(self, children: list[dict], out: bytearray) -> None:
-        for line in self._wrap(self._inline(children), self.width):
+    def _emit_inline(
+        self, children: list[dict], out: bytearray, qrs: list[str] | None = None
+    ) -> None:
+        for line in self._wrap(self._inline(children, qrs), self.width):
             self._emit_line(line, out, "")
 
     def _emit_line(
         self,
-        line: list[tuple[str, bool, bool]],
+        line: list[tuple[str, int, bool]],
         out: bytearray,
         prefix: str,
     ) -> None:
-        """line items are (word, bold, preceded_by_space) tuples."""
+        """line items are (word, style, preceded_by_space) tuples."""
         out += self._enc(prefix)
-        bold_state: bool | None = None
-        for index, (text, bold, preceded_by_space) in enumerate(line):
+        style_state = 0
+        for index, (text, style, preceded_by_space) in enumerate(line):
             if index > 0 and preceded_by_space:
                 out += b" "
-            if bold != bold_state:
-                out += _BOLD_ON if bold else _BOLD_OFF
-                bold_state = bold
+            if style != style_state:
+                out += self._style_bytes(style_state, style)
+                style_state = style
             out += self._enc(text)
-        if bold_state:
-            out += _BOLD_OFF
+        if style_state:
+            out += self._style_bytes(style_state, 0)
         out += b"\n"
+
+    @staticmethod
+    def _style_bytes(old: int, new: int) -> bytes:
+        """Commands that transition the printer from style old to new."""
+        commands = bytearray()
+        for flag, (on, off) in _STYLE_COMMANDS.items():
+            if old & flag and not new & flag:
+                commands += off
+            elif new & flag and not old & flag:
+                commands += on
+        return bytes(commands)
 
     def _enc(self, text: str) -> bytes:
         return text.encode(self.encoding, errors="replace")
@@ -203,47 +296,47 @@ class MarkdownToEscpos:
     # ------------------------------------------------------------------ wrap
 
     def _wrap(
-        self, segments: list[tuple[str, bool]], width: int, subsequent: str = ""
+        self, segments: list[tuple[str, int]], width: int, subsequent: str = ""
     ) -> list[list[tuple[str, bool, bool]]]:
-        """Greedy word wrap of (text, bold) segments. Returns lines, each a
-        list of (word, bold, preceded_by_space) tuples. Original spacing
+        """Greedy word wrap of (text, style) segments. Returns lines, each a
+        list of (word, style, preceded_by_space) tuples. Original spacing
         between words is preserved; hard newlines force a break; words longer
         than the line are hard-split."""
-        hard_lines: list[list[tuple[str, bool]]] = [[]]
-        for text, bold in segments:
+        hard_lines: list[list[tuple[str, int]]] = [[]]
+        for text, style in segments:
             for i, piece in enumerate(text.split("\n")):
                 if i > 0:
                     hard_lines.append([])
                 if piece:
-                    hard_lines[-1].append((piece, bold))
+                    hard_lines[-1].append((piece, style))
 
         lines: list[list[tuple[str, bool, bool]]] = []
         for parts in hard_lines:
             words: list[tuple[str, bool, bool]] = []
             pending_space = False
-            for text, bold in parts:
+            for text, style in parts:
                 for piece in re.split(r"(\s+)", text):
                     if not piece:
                         continue
                     if piece.isspace():
                         pending_space = True
                     else:
-                        words.append((piece, bold, pending_space))
+                        words.append((piece, style, pending_space))
                         pending_space = False
 
             current: list[tuple[str, bool, bool]] = []
             used = 0
             indent = 0
-            for word, bold, preceded_by_space in words:
+            for word, style, preceded_by_space in words:
                 avail = width - indent
                 if len(word) > avail:
                     if current:
                         lines.append(current)
                     # hard-split words wider than a whole line
                     while len(word) > width:
-                        lines.append([(word[:width], bold, False)])
+                        lines.append([(word[:width], style, False)])
                         word = word[width:]
-                    current = [(word, bold, False)]
+                    current = [(word, style, False)]
                     used = len(word)
                     indent = len(subsequent)
                     continue
@@ -254,7 +347,7 @@ class MarkdownToEscpos:
                     used = 0
                     indent = len(subsequent)
                     space = 0
-                current.append((word, bold, preceded_by_space and space == 1))
+                current.append((word, style, preceded_by_space and space == 1))
                 used += space + len(word)
             if current:
                 lines.append(current)

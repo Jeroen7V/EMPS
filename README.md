@@ -47,6 +47,8 @@ PRINTER_BACKEND=usb USB_VENDOR_ID=0x04b8 USB_PRODUCT_ID=0xe035 \
 ## Usage
 
 ```bash
+curl -X POST http://localhost:8000/print/test
+
 curl -X POST http://localhost:8000/print \
   -H 'Content-Type: application/json' \
   -d '{"markdown": "# Order 123\n\n- **Pizza** margherita\n- Cola\n\nTotal: **12.50**"}'
@@ -55,6 +57,11 @@ curl -X POST http://localhost:8000/print \
 Response: `{"status": "printed", "bytes": <n>}`. Errors: `422` for invalid
 markdown payload (empty/missing/too long, or untranslatable), `503` for
 printer errors (device unreachable, out of paper raise on the printer, etc).
+
+`POST /print/test` (no body) prints a built-in test page exercising every
+supported markdown feature - headings, bold, italic, underline,
+strikethrough, code, lists, task checkboxes, quotes, separators, and a QR
+code - handy for verifying the printer setup.
 
 `GET /health` returns `{"status": "ok", "backend": "...", "printer":
 "unknown" | "ok" | "error", "last_error": <detail or null>}`. The `printer`
@@ -67,15 +74,18 @@ failed print does not flip Docker's healthcheck unhealthy.
 
 | Markdown | ESC/POS |
 |---|---|
-| `#` | double width + height, bold |
-| `##` | double height, bold |
+| `#` | double width + height, bold, centered |
+| `##` | double height, bold, centered |
 | `###`+ | bold, normal size |
 | `**bold**` | ESC E bold on/off |
-| `*italic*` | printed as plain text |
-| `` `code` `` and fenced blocks | indented 2 spaces, monospace |
+| `*italic*` | ESC 4 / ESC 5 italic on/off |
+| `<u>underline</u>` | ESC - underline on/off |
+| `~~struck~~` | GS B reverse video on/off (ESC/POS has no native strikethrough) |
+| `` `code` `` and fenced blocks | indented 2 spaces, reverse video (white on black) |
 | `- item` / `1. item` | `* ` / numbered, hanging indent, nesting supported |
 | `- [ ]` / `- [x]` (task list) | `[ ]` / `[x]` checkbox markers |
 | `> quote` | `> ` prefix per line |
+| `[text](https://...)` | link text prints; URL also printed as a scannable QR code |
 | `---` | full-width dashed line |
 | end of document | 3 line feeds + partial cut |
 
