@@ -1,0 +1,40 @@
+print_markdown:
+  name: Print markdown
+  description: >-
+    Prints a markdown document on the EMPS thermal printer.
+  fields:
+    config_entry_id:
+      name: Printer
+      description: >-
+        The EMPS config entry (printer) to send the document to.
+      required: true
+      example: ""
+      selector:
+        config_entry:
+          integration: emps
+    markdown:
+      name: Markdown
+      description: >-
+        The markdown text to print (1-20000 characters). Templates are
+        rendered before the call is made.
+      required: true
+      example: "# Shopping list\n\n- [ ] Milk"
+      selector:
+        text:
+          multiline: true
+
+print_test_page:
+  name: Print test page
+  description: >-
+    Prints the built-in EMPS test page exercising every supported markdown
+    feature.
+  fields:
+    config_entry_id:
+      name: Printer
+      description: >-
+        The EMPS config entry (printer) to send the test page to.
+      required: true
+      example: ""
+      selector:
+        config_entry:
+          integration: emps

@@ -118,3 +118,51 @@ def test_missing_markdown_rejected(client):
 def test_unknown_backend_rejected():
     with pytest.raises(ValueError):
         create_app(Settings(backend="carrier-pigeon"))
+
+
+def test_health_includes_version(client):
+    client, _ = client
+    health = client.get("/health").json()
+    assert health["version"] == "0.1.0"
+
+
+def test_auth_token_rejects_missing_and_wrong_token(tmp_path):
+    output = tmp_path / "output.bin"
+    settings = Settings(
+        backend="file", file_backend_path=str(output), auth_token="secret"
+    )
+    app = create_app(settings)
+    with TestClient(app) as client:
+        assert client.post("/print", json={"markdown": "x\n"}).status_code == 401
+        assert client.post("/print/test").status_code == 401
+        assert (
+            client.post(
+                "/print",
+                json={"markdown": "x\n"},
+                headers={"Authorization": "Bearer wrong"},
+            ).status_code
+            == 401
+        )
+        assert (
+            client.post(
+                "/print",
+                json={"markdown": "x\n"},
+                headers={"Authorization": "Bearer secret"},
+            ).status_code
+            == 200
+        )
+
+
+def test_health_open_even_with_auth_token(tmp_path):
+    output = tmp_path / "output.bin"
+    settings = Settings(
+        backend="file", file_backend_path=str(output), auth_token="secret"
+    )
+    app = create_app(settings)
+    with TestClient(app) as client:
+        assert client.get("/health").status_code == 200
+
+
+def test_no_auth_token_by_default(client):
+    client, _ = client
+    assert client.post("/print", json={"markdown": "x\n"}).status_code == 200

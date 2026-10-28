@@ -1,0 +1,43 @@
+name: Home Assistant integration
+
+# Validates the custom component: HACS repository structure and
+# hassfest-style manifest checks, plus a lightweight import/syntax check.
+
+on:
+  push:
+    branches: [main]
+    paths: ["custom_components/**", "hacs.json"]
+  pull_request:
+    paths: ["custom_components/**", "hacs.json"]
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: HACS validation
+        uses: hacs/action@main
+        with:
+          category: integration
+
+      - name: Python syntax check
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: python -m compileall -q custom_components
+
+      - name: JSON validity
+        run: |
+          python - <<'PY'
+          import json
+          for f in [
+              "hacs.json",
+              "custom_components/emps/manifest.json",
+              "custom_components/emps/strings.json",
+              "custom_components/emps/translations/en.json",
+              "custom_components/emps/translations/nl.json",
+          ]:
+              json.load(open(f))
+          print("JSON OK")
+          PY

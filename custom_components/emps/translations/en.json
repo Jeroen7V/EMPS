@@ -1,0 +1,35 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to EMPS",
+        "description": "Enter the address of the EMPS markdown printing service.",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "token": "Bearer token (optional, only if EMPS_AUTH_TOKEN is set on the service)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the EMPS service",
+      "invalid_auth": "Invalid or missing bearer token"
+    },
+    "abort": {
+      "already_configured": "This EMPS service is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "EMPS options",
+        "data": {
+          "poll_interval": "Health poll interval in seconds (30-3600)"
+        }
+      }
+    },
+    "error": {
+      "invalid_poll_interval": "Poll interval must be between 30 and 3600 seconds"
+    }
+  }
+}

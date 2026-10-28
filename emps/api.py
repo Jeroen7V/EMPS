@@ -18,7 +18,7 @@
 
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from emps.backends import make_backend
@@ -33,6 +33,19 @@ class PrintRequest(BaseModel):
 class PrintResponse(BaseModel):
     status: str = "printed"
     bytes: int
+
+
+SERVICE_VERSION = "0.1.0"
+
+
+def require_auth(request: Request, settings: Settings) -> None:
+    """Reject unauthenticated mutating requests when EMPS_AUTH_TOKEN is set."""
+    if settings.auth_token is None:
+        return
+    header = request.headers.get("Authorization", "")
+    scheme, _, token = header.partition(" ")
+    if scheme.lower() != "bearer" or token != settings.auth_token:
+        raise HTTPException(status_code=401, detail="Invalid or missing bearer token")
 
 
 TEST_PAGE = """# EMPS Test Page
@@ -85,16 +98,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.backend = make_backend(settings)
     app.state.printer_state = {"status": "unknown", "detail": None}
 
+    def check_auth(request: Request) -> None:
+        require_auth(request, settings)
+
     @app.get("/health")
     def health() -> dict[str, str | None]:
         return {
             "status": "ok",
+            "version": SERVICE_VERSION,
             "backend": settings.backend,
             "printer": app.state.printer_state["status"],
             "last_error": app.state.printer_state["detail"],
         }
 
-    @app.post("/print", response_model=PrintResponse)
+    @app.post("/print", response_model=PrintResponse, dependencies=[Depends(check_auth)])
     def print_document(request: PrintRequest) -> PrintResponse:
         try:
             data = app.state.translator.translate(request.markdown)
@@ -112,7 +129,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.printer_state = {"status": "ok", "detail": None}
         return PrintResponse(bytes=len(data))
 
-    @app.post("/print/test", response_model=PrintResponse)
+    @app.post("/print/test", response_model=PrintResponse, dependencies=[Depends(check_auth)])
     def print_test_page() -> PrintResponse:
         """Print a built-in page exercising every supported markdown feature."""
         return print_document(PrintRequest(markdown=TEST_PAGE))
