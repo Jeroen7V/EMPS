@@ -68,6 +68,29 @@ def test_print_returns_byte_count(client):
     assert response.json()["bytes"] == output.stat().st_size
 
 
+def test_print_test_page(client):
+    client, output = client
+    response = client.post("/print/test")
+    assert response.status_code == 200
+    assert response.json()["status"] == "printed"
+    assert response.json()["bytes"] == output.stat().st_size
+    data = output.read_bytes()
+    assert b"\x1bE\x01" in data  # bold
+    assert b"\x1b4" in data  # italic
+    assert b"\x1b-\x01" in data  # underline
+    assert b"\x1dB\x01" in data  # reverse (strikethrough/code)
+    assert b"\x1ba\x01" in data  # centered headings
+    assert b"https://github.com/Jeroen7V/EMPS" in data  # QR data
+    assert b"[x] done" in data  # task list
+
+
+def test_print_test_page_updates_printer_state(client):
+    client, _ = client
+    assert client.post("/print/test").status_code == 200
+    health = client.get("/health").json()
+    assert health["printer"] == "ok"
+
+
 def test_print_writes_escpos_bytes(client):
     client, output = client
     response = client.post(

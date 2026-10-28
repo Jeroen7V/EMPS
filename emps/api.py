@@ -35,6 +35,44 @@ class PrintResponse(BaseModel):
     bytes: int
 
 
+TEST_PAGE = """# EMPS Test Page
+
+## Headings & Styles
+
+### H3 heading (bold, centered)
+
+**bold** *italic* <u>underline</u> ~~struck~~ and `code`
+
+**bold *italic* combined** ~~cut **bold***~~
+
+## Structure
+
+- unordered item
+  - nested item
+1. ordered item
+2. second
+
+- [ ] unchecked task
+- [x] done task
+
+> block quote line one
+> wrapped quote text continues here
+
+---
+
+## Code
+
+```
+def hello():
+    print("hi")
+```
+
+## QR Code
+
+Scan me: [emps on github](https://github.com/Jeroen7V/EMPS)
+"""
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or load_settings()
     app = FastAPI(
@@ -73,6 +111,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ) from exc
         app.state.printer_state = {"status": "ok", "detail": None}
         return PrintResponse(bytes=len(data))
+
+    @app.post("/print/test", response_model=PrintResponse)
+    def print_test_page() -> PrintResponse:
+        """Print a built-in page exercising every supported markdown feature."""
+        return print_document(PrintRequest(markdown=TEST_PAGE))
 
     return app
 
