@@ -57,6 +57,51 @@ Consequences for the design:
   `custom_components/emps` via `"zip_url"`/content filters or the default
   integration convention (`custom_components/<domain>` is auto-detected).
 
+### 1.2.1 Repository layout: monorepo (chosen) vs. separate repo
+
+Marketplace/HACS resolves integrations from any GitHub repository as long as
+it contains `custom_components/emps/` with a valid `manifest.json` and a root
+`hacs.json` — a dedicated repository is **not** required. Two layouts were
+considered:
+
+**A. Monorepo (chosen): integration lives in this repository**
+
+```
+EMPS/
+├── emps/                    # existing FastAPI service (unchanged)
+├── custom_components/emps/  # the Home Assistant integration
+├── hacs.json                # new, points Marketplace at the integration
+└── ...
+```
+
+- Pros: one repo, one issue tracker, one release flow — a single tag can
+  ship a service change and the matching integration change together, which
+  matters because the integration is coupled to the service's HTTP API
+  (e.g. the optional bearer token, `version` in `/health`); users already
+  watch this repo; lowest overhead for a solo maintainer.
+- Cons: every tag updates the integration for all Marketplace users even for
+  service-only changes (mitigate with component-scoped release notes and the
+  `home_assistant_version` minimum in `hacs.json`); CI gains a HACS/hassfest
+  job (purely additive); the README must lead with both components so
+  integration-only users are not confused by the Docker/ESC/POS content.
+  Repo zip download size is trivial at this footprint.
+
+**B. Separate `EMPS-home-assistant` repository**
+
+- Pros: clean separation of audiences and release cadences; the integration
+  repo is exactly what Marketplace expects at its root; service releases never
+  touch integration users.
+- Cons: two repos to maintain; cross-repo coordination whenever the HTTP API
+  changes (the one real coupling point); issue triage across both; manual
+  version sync.
+
+**Decision: monorepo (A).** The service↔integration API coupling benefits
+from same-repo, same-tag releases, and EMPS is small enough that the monorepo
+ downsides don't bite. If the integration later grows a large audience or
+needs an independent release cadence, splitting it out is a mechanical move
+(copy `custom_components/emps/` + `hacs.json` to a new repo) — nothing in the
+integration design locks us in.
+
 ### 1.3 Alternatives considered (pros / cons)
 
 **A. Keep `rest_command` + YAML scripts (status quo, `docs/home-assistant.md`)**
