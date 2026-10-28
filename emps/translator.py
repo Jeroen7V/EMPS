@@ -23,10 +23,11 @@ result can be sent verbatim to any ESC/POS printer:
 - ESC E n          bold on/off
 - ESC 4 / ESC 5    italic on/off
 - ESC - n          underline on/off
-- GS B n           reverse video on/off (used for strikethrough and code)
+- GS B n           reverse video on/off (code; spans the full line width)
 - GS ! n           character size (width/height)
 - ESC a n          alignment (headings are centered)
-- GS ( k fn 165+  QR code (http link URLs print as scannable codes)
+- ESC backslash     relative print position (strikethrough dash overprint)
+- GS ( k cn fn...  QR code (http link URLs print as scannable codes)
 - GS V 66 n        partial cut with feed
 """
 
@@ -60,20 +61,28 @@ _QR = GS + b"(k"  # QR code commands (ESC/POS function 165-182)
 
 
 def _qr_payload(data: bytes, fn: int, extra: bytes = b"") -> bytes:
-    """GS ( k payload: pL pH fn [m] [data]."""
-    body = bytes([fn]) + extra + data
+    """GS ( k payload: pL pH cn fn [parameters] [data]."""
+    body = _QR_CN + bytes([fn]) + extra + data
     return _QR + bytes([len(body) % 256, len(body) // 256]) + body
 
+
+def _relative_pos(dots: int) -> bytes:
+    """ESC backslash nL nH: move the print position by dots (negative left)."""
+    value = dots & 0xFFFF
+    return ESC + b"\\" + bytes([value & 0xFF, value >> 8])
+
+_QR_CN = b"\x31"  # GS ( k code type 1 = QR code
 _BULLET = "*"  # ASCII: this printer renders only the low code page reliably
 _CHECKBOX_ON = "[x] "
 _CHECKBOX_OFF = "[ ] "
-_CODE_INDENT = "  "
 _LIST_INDENT = "  "
+_DOTS_PER_CHAR = 12  # font A character cell width in print head dots
 
 _BOLD = 1
 _ITALIC = 2
 _UNDERLINE = 4
-_REVERSE = 8  # strikethrough and code print white-on-black
+_REVERSE = 8  # code prints white-on-black
+_STRIKE = 16  # struck text is overprinted with dashes
 
 _STYLE_COMMANDS = {
     _BOLD: (_BOLD_ON, _BOLD_OFF),
@@ -148,11 +157,11 @@ class MarkdownToEscpos:
         data = url.encode(self.encoding, errors="replace")
         if not data:
             return
-        out += _qr_payload(b"", 165)  # model 2
+        out += _qr_payload(b"", 165, b"\x32\x00")  # model 2
         out += _qr_payload(b"", 167, bytes([6]))  # module size 6
-        out += _qr_payload(b"", 169, bytes([48]))  # error correction M
-        out += _qr_payload(data, 180)  # store data
-        out += _qr_payload(b"", 181, (0).to_bytes(2, "little"))  # print
+        out += _qr_payload(b"", 169, bytes([49]))  # error correction M
+        out += _qr_payload(data, 180, b"\x30")  # store data
+        out += _qr_payload(b"", 181, b"\x30")  # print
         out += b"\n"
 
     def _paragraph(self, token: dict, out: bytearray) -> None:
@@ -205,8 +214,14 @@ class MarkdownToEscpos:
                     self._block(child, out)
 
     def _code_block(self, token: dict, out: bytearray) -> None:
-        for line in token["raw"].rstrip("\n").split("\n"):
-            self._emit_line([(line, _REVERSE, False)], out, _CODE_INDENT)
+        raw = token["raw"].rstrip("\n")
+        for line in raw.split("\n"):
+            for start in range(0, len(line), self.width):
+                chunk = line[start : start + self.width]
+                if not chunk.strip():
+                    out += b"\n"
+                    continue
+                out += _REVERSE_ON + self._enc(chunk.ljust(self.width)) + _REVERSE_OFF + b"\n"
 
     def _separator(self, out: bytearray) -> None:
         out += self._enc("-" * self.width) + b"\n"
@@ -215,10 +230,10 @@ class MarkdownToEscpos:
 
     def _inline(self, children: list[dict], qrs: list[str] | None = None) -> list[tuple[str, int]]:
         """Flatten inline tokens to (text, style) segments with a style
-        bitmask (bold/italic/underline/reverse; strikethrough and code use
-        reverse video). Links print their text only; http(s) link URLs are
-        collected into qrs for QR printing. <u>/</u> inline HTML toggles
-        underline."""
+        bitmask (bold/italic/underline/reverse/strike; code uses reverse
+        video, strikethrough is drawn as a dash overprint). Links print
+        their text only; http(s) link URLs are collected into qrs for QR
+        printing. <u>/</u> inline HTML toggles underline."""
         segments: list[tuple[str, int]] = []
         underline = False
         for token in children:
@@ -241,7 +256,7 @@ class MarkdownToEscpos:
                     segments.append((text, style | _ITALIC))
             elif kind == "strikethrough":
                 for text, style in self._inline(token["children"], qrs):
-                    segments.append((text, style | _REVERSE))
+                    segments.append((text, style | _STRIKE))
             elif kind == "link":
                 url = token.get("attrs", {}).get("url", "")
                 if qrs is not None and re.match(r"https?://", url):
@@ -267,16 +282,34 @@ class MarkdownToEscpos:
     ) -> None:
         """line items are (word, style, preceded_by_space) tuples."""
         out += self._enc(prefix)
+        col = len(prefix)
+        total = col
+        for index, (text, style, preceded_by_space) in enumerate(line):
+            space = 1 if (index > 0 and preceded_by_space) else 0
+            total += space + len(text)
+        strike_runs: list[list[int]] = []
         style_state = 0
         for index, (text, style, preceded_by_space) in enumerate(line):
             if index > 0 and preceded_by_space:
                 out += b" "
+                col += 1
+            if style & _STRIKE:
+                if strike_runs and strike_runs[-1][1] == col:
+                    strike_runs[-1][1] = col + len(text)
+                else:
+                    strike_runs.append([col, col + len(text)])
             if style != style_state:
                 out += self._style_bytes(style_state, style)
                 style_state = style
             out += self._enc(text)
+            col += len(text)
         if style_state:
             out += self._style_bytes(style_state, 0)
+        for start, end in strike_runs:
+            out += _relative_pos(-(total - start) * _DOTS_PER_CHAR)
+            out += self._enc("-" * (end - start))
+            if total > end:
+                out += _relative_pos((total - end) * _DOTS_PER_CHAR)
         out += b"\n"
 
     @staticmethod

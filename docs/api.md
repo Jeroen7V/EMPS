@@ -63,8 +63,9 @@ status.
 | `**bold**` | ESC E bold on/off |
 | `*italic*` | ESC 4 italic on/off |
 | `<u>underline</u>` | ESC `-` underline on/off (inline HTML) |
-| `~~strikethrough~~` | reverse video on/off |
-| `` `code` `` and fenced blocks | reverse video |
+| `~~strikethrough~~` | dash overprint via ESC `\` relative positioning (ESC/POS has no native strikethrough) |
+| `` `code` `` | reverse video (white on black) |
+| fenced code blocks | full-width reverse video: every line is a black bar with white text |
 | http(s) links | printed as text plus a scannable QR code |
 | ordered/unordered/nested lists | indented lines |
 | task list checkboxes | `[ ]` / `[x]` boxes |

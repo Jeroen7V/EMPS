@@ -133,11 +133,12 @@ Authorization: Bearer <token>` to the `rest_command`.
 ## Markdown subset supported
 
 Headings (`#`, `##`, `###` — centered), bold, italic, `<u>underline</u>`
-(inline HTML), `~~strikethrough~~` (printed as reverse video), http(s) links
-(printed as text plus a scannable QR code), ordered/unordered/nested lists,
-task list checkboxes (`- [ ]` / `- [x]`), block quotes, fenced code blocks
-(reverse video), and `---` separators. Paper is 58 mm (32 columns); text
-wraps automatically. The full mapping table is in [api.md](api.md).
+(inline HTML), `~~strikethrough~~` (struck through with a dash overprint),
+http(s) links (printed as text plus a scannable QR code), ordered/unordered/
+nested lists, task list checkboxes (`- [ ]` / `- [x]`), block quotes, fenced
+code blocks (printed as full-width black bars), and `---` separators. Paper is
+58 mm (32 columns) by default; text wraps automatically. The full mapping
+table is in [api.md](api.md).
 
 ## Practical notes
 

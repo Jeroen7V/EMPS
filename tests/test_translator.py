@@ -114,19 +114,21 @@ class TestInline:
         assert _UNDERLINE_ON + b"line" in data
         assert _UNDERLINE_OFF + b"here" in data
 
-    def test_strikethrough_reverse_video(self):
+    def test_strikethrough_is_struck_not_blacked_out(self):
         data = make().translate("a ~~gone~~ here\n")
-        assert _REVERSE_ON + b"gone" in data
-        assert _REVERSE_OFF + b"here" in data
+        assert _REVERSE_ON not in data
+        assert b"gone" in data
+        # a dash overprint is drawn over the struck word
+        assert b"----" in data
 
     def test_codespan_reverse_video(self):
         data = make().translate("order `extra` now\n")
         assert _REVERSE_ON + b"extra" in data
         assert _REVERSE_OFF + b"now" in data
 
-    def test_code_block_reverse_video(self):
+    def test_code_block_reverse_video_full_width(self):
         data = make().translate("```\necho hi\n```\n")
-        assert _REVERSE_ON + b"echo hi" + _REVERSE_OFF in data
+        assert _REVERSE_ON + b"echo hi".ljust(48) + _REVERSE_OFF in data
 
     def test_combined_styles(self):
         data = make().translate("**bold *and italic***\n")
@@ -151,9 +153,9 @@ class TestInline:
         from emps.translator import _qr_payload
 
         data = make().translate("[x](http://e.com)\n")
-        assert _qr_payload(b"", 165) in data  # model 2
-        assert _qr_payload(b"http://e.com", 180) in data  # store data
-        assert _qr_payload(b"", 181, b"\x00\x00") in data  # print
+        assert _qr_payload(b"", 165, b"\x32\x00") in data  # model 2
+        assert _qr_payload(b"http://e.com", 180, b"\x30") in data  # store data
+        assert _qr_payload(b"", 181, b"\x30") in data  # print
 
     def test_spacing_is_preserved_between_styles(self):
         assert visible(make().translate("a *side*:\n")).strip() == "a side:"
@@ -214,8 +216,8 @@ class TestBlocks:
     def test_thematic_break_is_full_width(self):
         assert "-" * 48 in visible(make().translate("---\n"))
 
-    def test_code_block_indented(self):
-        assert "  echo hi" in visible(make().translate("```\necho hi\n```\n"))
+    def test_code_block_spans_full_width(self):
+        assert "echo hi".ljust(48) in visible(make().translate("```\necho hi\n```\n"))
 
     def test_block_quote_prefix(self):
         assert "> noted" in visible(make().translate("> noted\n"))
