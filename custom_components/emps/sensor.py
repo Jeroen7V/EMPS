@@ -87,7 +87,7 @@ class EmpsBackendSensor(EmpsDeviceEntity, SensorEntity):
 class EmpsLastPrintSensor(EmpsDeviceEntity, SensorEntity):
     """Size in bytes of the most recent successful print."""
 
-    _attr_device_class = SensorDeviceClass.SIZE
+    _attr_device_class = SensorDeviceClass.DATA_SIZE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = "B"
 
