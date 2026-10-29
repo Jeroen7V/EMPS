@@ -153,30 +153,55 @@ class TestInline:
 
     def test_link_prints_text_not_url(self):
         data = make().translate("see [docs](https://example.com)\n")
-        # the printed line has the link text; the URL appears only in QR data
+        # the printed line has the link text; the URL is encoded in the QR image
         assert visible(data).splitlines()[0] == "see docs"
-        assert b"https://example.com" in data
+        assert b"https://example.com" not in visible(data).encode("cp437")
 
     def test_non_http_link_gets_no_qr(self):
         data = make().translate("mail [me](mailto:a@b.c)\n")
-        assert b"(k" not in data
+        assert GS + b"v0\x00" not in data
 
-    def test_qr_command_sequence(self):
-        from emps.translator import _qr_payload
-
-        data = make().translate("[x](http://e.com)\n")
-        assert _qr_payload(b"", 65, b"\x32\x00") in data  # model 2
-        assert _qr_payload(b"http://e.com", 80, b"\x30") in data  # store data
-        assert _qr_payload(b"", 81, b"\x30") in data  # print
-
-    def test_qr_function_numbers_are_ascii(self):
-        # The printer expects GS ( k function numbers as ASCII ('A'..'Q');
-        # raw bytes 0xA5.. would be printed as text instead of executing.
-        from emps.translator import _qr_payload
+    def test_qr_printed_as_centered_raster_image(self):
+        from PIL import Image
 
         data = make().translate("[x](http://e.com)\n")
-        assert _qr_payload(b"", 65, b"\x32\x00") in data
-        assert b"\xa5" not in data and b"\xb4" not in data
+        assert GS + b"v0\x00" in data  # QR is a raster bit image
+        i = data.index(GS + b"v0\x00")
+        w = data[i + 4] | data[i + 5] << 8
+        h = data[i + 6] | data[i + 7] << 8
+        img = Image.frombytes("1", (w * 8, h), data[i + 8 : i + 8 + w * h])
+        assert img.width == 48 * 12  # full print head width
+        px = img.load()
+        xs = [x for x in range(img.width) for y in range(img.height) if px[x, y]]
+        # horizontally centered: ink spans symmetrically around the middle
+        middle = img.width / 2
+        assert abs((min(xs) + max(xs)) / 2 - middle) <= 2
+        # there is a quiet zone (white margin) left and right of the code
+        assert min(xs) > 0 and max(xs) < img.width - 1
+
+    def test_qr_raster_is_decodable(self):
+        from PIL import Image
+
+        data = make().translate("[x](http://e.com)\n")
+        i = data.index(GS + b"v0\x00")
+        w = data[i + 4] | data[i + 5] << 8
+        h = data[i + 6] | data[i + 7] << 8
+        img = Image.frombytes("1", (w * 8, h), data[i + 8 : i + 8 + w * h])
+        try:
+            from pyzbar.pyzbar import decode
+
+            assert any("http://e.com" in str(r.data) for r in decode(img))
+        except ImportError:
+            # pyzbar is optional; assert plausible QR geometry instead:
+            # ink spans a square region of whole 6-px modules with a quiet zone
+            px = img.load()
+            xs = [x for x in range(img.width) for y in range(img.height) if px[x, y]]
+            ys = [y for y in range(img.height) for x in range(img.width) if px[x, y]]
+            span_x = max(xs) - min(xs) + 1
+            span_y = max(ys) - min(ys) + 1
+            assert span_x == span_y
+            assert span_x % 6 == 0
+            assert span_x >= 21 * 6  # at least a version-1 QR code
 
     def test_strikethrough_uses_absolute_positioning(self):
         from emps.translator import _absolute_pos, _DOTS_PER_CHAR

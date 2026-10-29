@@ -65,8 +65,8 @@ status.
 | `<u>underline</u>` | ESC `-` underline on/off (inline HTML) |
 | `~~strikethrough~~` | dash overprint via ESC `$` absolute positioning (ESC/POS has no native strikethrough) |
 | `` `code` `` | reverse video (white on black) |
-| fenced code blocks | full-width raster bit image (`GS v 0`): a solid black bar with white text (reverse video only inverts glyphs on many clone printers) |
-| http(s) links | printed as text plus a scannable QR code |
+| fenced code blocks | full-width raster bit image (`GS v 0`): a solid black bar with white text, framed by a black row above and below (reverse video only inverts glyphs on many clone printers) |
+| http(s) links | printed as text plus a scannable, centered QR code (rendered as a raster bit image with a quiet zone) |
 | ordered/unordered/nested lists | indented lines |
 | task list checkboxes | `[ ]` / `[x]` boxes |
 | `>` block quotes | indented |

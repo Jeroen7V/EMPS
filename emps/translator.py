@@ -23,11 +23,13 @@ result can be sent verbatim to any ESC/POS printer:
 - ESC E n          bold on/off
 - ESC 4 / ESC 5    italic on/off
 - ESC - n          underline on/off
-- GS B n           reverse video on/off (code; spans the full line width)
+- GS B n           reverse video on/off (inline code spans)
 - GS ! n           character size (width/height)
 - ESC a n          alignment (headings are centered)
 - ESC $ nL nH      absolute print position (strikethrough dash overprint)
-- GS ( k cn fn...  QR code (http link URLs print as scannable codes)
+- GS v 0           raster bit image (fenced code blocks; centered QR codes
+                    for http link URLs, since clone firmwares cannot center
+                    the native GS ( k code)
 - GS V 66 n        partial cut with feed
 """
 
@@ -37,6 +39,7 @@ import re
 import textwrap
 
 import mistune
+from PIL import Image, ImageDraw, ImageFont
 
 ESC = b"\x1b"
 GS = b"\x1d"
@@ -154,15 +157,40 @@ class MarkdownToEscpos:
             self._qr(out, url)
 
     def _qr(self, out: bytearray, url: str) -> None:
-        data = url.encode(self.encoding, errors="replace")
-        if not data:
-            return
-        out += _qr_payload(b"", 65, b"\x32\x00")  # model 2
-        out += _qr_payload(b"", 67, bytes([6]))  # module size 6
-        out += _qr_payload(b"", 69, bytes([49]))  # error correction M
-        out += _qr_payload(data, 80, b"\x30")  # store data
-        out += _qr_payload(b"", 81, b"\x30")  # print
-        out += b"\n"
+        """Print the URL as a QR code, centered on the printable width.
+
+        The native GS ( k sequence cannot be centered on clone firmwares,
+        so the QR is rendered as a GS v 0 raster bit image with a quiet
+        zone, horizontally centered over the full print head width."""
+        import qrcode
+
+        code = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=6, border=0)
+        code.add_data(url)
+        code.make(fit=True)
+        matrix = code.modules
+        size = code.modules_count
+        quiet = 4  # quiet zone in modules
+        px = (size + 2 * quiet) * 6
+        line_width = self.width * _DOTS_PER_CHAR
+        left = max((line_width - px) // 2, 0)
+        qr_img = Image.new("1", (px, px), 0)
+        draw = ImageDraw.Draw(qr_img)
+        for row in range(size):
+            for col in range(size):
+                if matrix[row][col]:
+                    x0 = (quiet + col) * 6
+                    y0 = (quiet + row) * 6
+                    draw.rectangle([x0, y0, x0 + 5, y0 + 5], fill=1)
+        img_pad = Image.new("1", (line_width, px), 0)
+        img_pad.paste(qr_img, (left, 0))
+        out += self._raster_header(img_pad)
+        out += img_pad.tobytes()
+        out += b"\n\n"
+
+    def _raster_header(self, img: Image.Image) -> bytes:
+        """GS v 0 header for a mode-1 image (bytes-per-row and height)."""
+        width_bytes = img.width // 8
+        return GS + b"v0\x00" + bytes([width_bytes % 256, width_bytes // 256, img.height % 256, img.height // 256])
 
     def _paragraph(self, token: dict, out: bytearray) -> None:
         qrs: list[str] = []
@@ -232,13 +260,13 @@ class MarkdownToEscpos:
         out += self._raster_code_block(lines)
 
     def _raster_code_block(self, lines: list[str]) -> bytes:
-        """GS v 0 payload: full-width black bar, code text punched white."""
-        from PIL import Image, ImageDraw, ImageFont
-
+        """GS v 0 payload: full-width black bar, code text punched white,
+        framed by a black row above and below for readability."""
         px_width = self.width * _DOTS_PER_CHAR
         px_line = _CODE_FONT_H * 2  # 12-dot font A cell doubled vertically
         pad = 4
-        height = len(lines) * px_line + pad * 2
+        frame = 8  # thickness of the black rows around the block
+        height = len(lines) * px_line + pad * 2 + frame * 2
         img = Image.new("1", (px_width, height), 1)
         draw = ImageDraw.Draw(img)
         font = ImageFont.load_default()
@@ -250,7 +278,7 @@ class MarkdownToEscpos:
                 sdraw.text((col * 6, 0), char, fill=1, font=font)
             big = small.resize((small.width * 2, px_line), Image.NEAREST)
             inverted = Image.eval(big, lambda v: 1 - v)
-            img.paste(inverted, (2, pad + index * px_line))
+            img.paste(inverted, (2, frame + pad + index * px_line))
         raster = img.tobytes()
         header = GS + b"v0\x00" + bytes([px_width // 8 % 256, px_width // 8 // 256])
         header += bytes([height % 256, height // 256])
