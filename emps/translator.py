@@ -26,7 +26,6 @@ result can be sent verbatim to any ESC/POS printer:
 - GS B n           reverse video on/off (inline code spans)
 - GS ! n           character size (width/height)
 - ESC a n          alignment (headings are centered)
-- ESC $ nL nH      absolute print position (strikethrough dash overprint)
 - GS v 0           raster bit image (fenced code blocks; centered QR codes
                     for http link URLs, since clone firmwares cannot center
                     the native GS ( k code)
@@ -69,10 +68,6 @@ def _qr_payload(data: bytes, fn: int, extra: bytes = b"") -> bytes:
     return _QR + bytes([len(body) % 256, len(body) // 256]) + body
 
 
-def _absolute_pos(dots: int) -> bytes:
-    """ESC $ nL nH: move the print position to dots from the left margin."""
-    return ESC + b"$" + bytes([dots % 256, dots // 256])
-
 _QR_CN = b"\x31"  # GS ( k code type 1 = QR code
 _BULLET = "*"  # ASCII: this printer renders only the low code page reliably
 _CHECKBOX_ON = "[x] "
@@ -85,7 +80,6 @@ _BOLD = 1
 _ITALIC = 2
 _UNDERLINE = 4
 _REVERSE = 8  # code prints white-on-black
-_STRIKE = 16  # struck text is overprinted with dashes
 
 _STYLE_COMMANDS = {
     _BOLD: (_BOLD_ON, _BOLD_OFF),
@@ -100,7 +94,7 @@ class MarkdownToEscpos:
         self.width = width
         self.encoding = encoding
         self.feed_lines = feed_lines
-        self._md = mistune.create_markdown(renderer=None, plugins=["task_lists", "strikethrough"])
+        self._md = mistune.create_markdown(renderer=None, plugins=["task_lists"])
 
     # ------------------------------------------------------------------ API
 
@@ -291,10 +285,9 @@ class MarkdownToEscpos:
 
     def _inline(self, children: list[dict], qrs: list[str] | None = None) -> list[tuple[str, int]]:
         """Flatten inline tokens to (text, style) segments with a style
-        bitmask (bold/italic/underline/reverse/strike; code uses reverse
-        video, strikethrough is drawn as a dash overprint). Links print
-        their text only; http(s) link URLs are collected into qrs for QR
-        printing. <u>/</u> inline HTML toggles underline."""
+        bitmask (bold/italic/underline/reverse; code uses reverse video).
+        Links print their text only; http(s) link URLs are collected into
+        qrs for QR printing. <u>/</u> inline HTML toggles underline."""
         segments: list[tuple[str, int]] = []
         underline = False
         for token in children:
@@ -315,9 +308,6 @@ class MarkdownToEscpos:
             elif kind == "emphasis":
                 for text, style in self._inline(token["children"], qrs):
                     segments.append((text, style | _ITALIC))
-            elif kind == "strikethrough":
-                for text, style in self._inline(token["children"], qrs):
-                    segments.append((text, style | _STRIKE))
             elif kind == "link":
                 url = token.get("attrs", {}).get("url", "")
                 if qrs is not None and re.match(r"https?://", url):
@@ -343,32 +333,16 @@ class MarkdownToEscpos:
     ) -> None:
         """line items are (word, style, preceded_by_space) tuples."""
         out += self._enc(prefix)
-        col = len(prefix)
-        total = col
-        for index, (text, style, preceded_by_space) in enumerate(line):
-            space = 1 if (index > 0 and preceded_by_space) else 0
-            total += space + len(text)
-        strike_runs: list[list[int]] = []
         style_state = 0
         for index, (text, style, preceded_by_space) in enumerate(line):
             if index > 0 and preceded_by_space:
                 out += b" "
-                col += 1
-            if style & _STRIKE:
-                if strike_runs and strike_runs[-1][1] == col:
-                    strike_runs[-1][1] = col + len(text)
-                else:
-                    strike_runs.append([col, col + len(text)])
             if style != style_state:
                 out += self._style_bytes(style_state, style)
                 style_state = style
             out += self._enc(text)
-            col += len(text)
         if style_state:
             out += self._style_bytes(style_state, 0)
-        for start, end in strike_runs:
-            out += _absolute_pos(start * _DOTS_PER_CHAR)
-            out += self._enc("-" * (end - start))
         out += b"\n"
 
     @staticmethod

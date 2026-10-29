@@ -54,9 +54,9 @@ TEST_PAGE = """# EMPS Test Page
 
 ### H3 heading (bold, centered)
 
-**bold** *italic* <u>underline</u> ~~struck~~ and `code`
+**bold** *italic* <u>underline</u> and `code`
 
-**bold *italic* combined** ~~cut **bold** here~~
+**bold *italic* combined** with `more code`
 
 ## Structure
 

@@ -116,12 +116,12 @@ class TestInline:
         assert _UNDERLINE_ON + b"line" in data
         assert _UNDERLINE_OFF + b"here" in data
 
-    def test_strikethrough_is_struck_not_blacked_out(self):
-        data = make().translate("a ~~gone~~ here\n")
-        assert _REVERSE_ON not in data
-        assert b"gone" in data
-        # a dash overprint is drawn over the struck word
-        assert b"----" in data
+    def test_strikethrough_renders_as_plain_text(self):
+        # Strikethrough is unsupported: without the mistune plugin the
+        # ~~ markers stay literal and the text prints unchanged.
+        text = visible(make().translate("a ~~gone~~ here\n"))
+        assert "gone" in text
+        assert b"----" not in make().translate("a ~~gone~~ here\n")
 
     def test_codespan_reverse_video(self):
         data = make().translate("order `extra` now\n")
@@ -202,14 +202,6 @@ class TestInline:
             assert span_x == span_y
             assert span_x % 6 == 0
             assert span_x >= 21 * 6  # at least a version-1 QR code
-
-    def test_strikethrough_uses_absolute_positioning(self):
-        from emps.translator import _absolute_pos, _DOTS_PER_CHAR
-
-        data = make().translate("a ~~gone~~ here\n")
-        # the dash overprint is placed with ESC $ at the struck word's column
-        assert _absolute_pos(2 * _DOTS_PER_CHAR) in data
-        assert ESC + b"\\" not in data
 
     def test_spacing_is_preserved_between_styles(self):
         assert visible(make().translate("a *side*:\n")).strip() == "a side:"
