@@ -17,6 +17,7 @@
 from emps.translator import (
     _BOLD_OFF,
     ESC,
+    GS,
     _BOLD_ON,
     _CENTER_OFF,
     _CENTER_ON,
@@ -127,9 +128,19 @@ class TestInline:
         assert _REVERSE_ON + b"extra" in data
         assert _REVERSE_OFF + b"now" in data
 
-    def test_code_block_reverse_video_full_width(self):
+    def test_code_block_printed_as_raster_image(self):
+        # GS B reverse video only inverts glyphs on many clone printers
+        # (spaces/padding stay white), so code blocks are drawn as a GS v 0
+        # raster bit image: a solid black bar with the text punched white.
         data = make().translate("```\necho hi\n```\n")
-        assert _REVERSE_ON + b"echo hi".ljust(48) + _REVERSE_OFF in data
+        assert data.find(GS + b"v0\x00") > 0
+        assert _REVERSE_ON not in data
+        # decodable raster: width in bytes and height match the payload size
+        i = data.index(GS + b"v0\x00")
+        w = data[i + 4] | data[i + 5] << 8
+        h = data[i + 6] | data[i + 7] << 8
+        assert len(data) >= i + 8 + w * h
+        assert w * 8 == 48 * 12  # full width: columns x dots per character
 
     def test_combined_styles(self):
         data = make().translate("**bold *and italic***\n")
@@ -234,8 +245,19 @@ class TestBlocks:
     def test_thematic_break_is_full_width(self):
         assert "-" * 48 in visible(make().translate("---\n"))
 
-    def test_code_block_spans_full_width(self):
-        assert "echo hi".ljust(48) in visible(make().translate("```\necho hi\n```\n"))
+    def test_code_block_raster_is_solid_bar_with_white_text(self):
+        import numpy as np
+        from PIL import Image
+
+        data = make().translate("```\necho hi\n```\n")
+        i = data.index(GS + b"v0\x00")
+        w = data[i + 4] | data[i + 5] << 8
+        h = data[i + 6] | data[i + 7] << 8
+        img = Image.frombytes("1", (w * 8, h), data[i + 8 : i + 8 + w * h])
+        a = np.array(img)
+        # borders and padding rows are solid black; the text area has holes
+        assert a[0].all() and a[-1].all() and a[:, 0].all() and a[:, -1].all()
+        assert not a.all()  # some pixels are white (the code text)
 
     def test_block_quote_prefix(self):
         assert "> noted" in visible(make().translate("> noted\n"))

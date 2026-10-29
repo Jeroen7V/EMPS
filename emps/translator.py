@@ -76,6 +76,7 @@ _CHECKBOX_ON = "[x] "
 _CHECKBOX_OFF = "[ ] "
 _LIST_INDENT = "  "
 _DOTS_PER_CHAR = 12  # font A character cell width in print head dots
+_CODE_FONT_H = 11  # PIL default bitmap font glyph height
 
 _BOLD = 1
 _ITALIC = 2
@@ -213,14 +214,47 @@ class MarkdownToEscpos:
                     self._block(child, out)
 
     def _code_block(self, token: dict, out: bytearray) -> None:
+        """Render the fenced block as one full-width raster bit image.
+
+        Reverse video (GS B) is emitted as a text-mode style, but many clone
+        firmwares (e.g. the Goojprt PT-210) only invert each glyph's own
+        bitmap, leaving spaces and padding cells white. A GS v 0 raster
+        image is the only portable way to get a solid black bar with white
+        text on such printers."""
         raw = token["raw"].rstrip("\n")
+        lines = []
         for line in raw.split("\n"):
-            for start in range(0, len(line), self.width):
+            for start in range(0, max(len(line), 1), self.width):
                 chunk = line[start : start + self.width]
-                if not chunk.strip():
-                    out += b"\n"
-                    continue
-                out += _REVERSE_ON + self._enc(chunk.ljust(self.width)) + _REVERSE_OFF + b"\n"
+                lines.append(chunk.rstrip())
+        if not lines:
+            return
+        out += self._raster_code_block(lines)
+
+    def _raster_code_block(self, lines: list[str]) -> bytes:
+        """GS v 0 payload: full-width black bar, code text punched white."""
+        from PIL import Image, ImageDraw, ImageFont
+
+        px_width = self.width * _DOTS_PER_CHAR
+        px_line = _CODE_FONT_H * 2  # 12-dot font A cell doubled vertically
+        pad = 4
+        height = len(lines) * px_line + pad * 2
+        img = Image.new("1", (px_width, height), 1)
+        draw = ImageDraw.Draw(img)
+        font = ImageFont.load_default()
+        for index, text in enumerate(lines):
+            big = Image.new("1", (max(len(text), 1) * 12, px_line), 0)
+            small = Image.new("1", (max(len(text), 1) * 6, 11), 0)
+            sdraw = ImageDraw.Draw(small)
+            for col, char in enumerate(text):
+                sdraw.text((col * 6, 0), char, fill=1, font=font)
+            big = small.resize((small.width * 2, px_line), Image.NEAREST)
+            inverted = Image.eval(big, lambda v: 1 - v)
+            img.paste(inverted, (2, pad + index * px_line))
+        raster = img.tobytes()
+        header = GS + b"v0\x00" + bytes([px_width // 8 % 256, px_width // 8 // 256])
+        header += bytes([height % 256, height // 256])
+        return header + raster
 
     def _separator(self, out: bytearray) -> None:
         out += self._enc("-" * self.width) + b"\n"
