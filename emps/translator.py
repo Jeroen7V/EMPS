@@ -23,11 +23,12 @@ result can be sent verbatim to any ESC/POS printer:
 - ESC E n          bold on/off
 - ESC 4 / ESC 5    italic on/off
 - ESC - n          underline on/off
-- GS B n           reverse video on/off (code; spans the full line width)
+- GS B n           reverse video on/off (inline code spans)
 - GS ! n           character size (width/height)
 - ESC a n          alignment (headings are centered)
-- ESC backslash     relative print position (strikethrough dash overprint)
-- GS ( k cn fn...  QR code (http link URLs print as scannable codes)
+- GS v 0           raster bit image (fenced code blocks; centered QR codes
+                    for http link URLs, since clone firmwares cannot center
+                    the native GS ( k code)
 - GS V 66 n        partial cut with feed
 """
 
@@ -37,6 +38,7 @@ import re
 import textwrap
 
 import mistune
+from PIL import Image, ImageDraw, ImageFont
 
 ESC = b"\x1b"
 GS = b"\x1d"
@@ -57,7 +59,7 @@ _SIZE_DOUBLE_HEIGHT = GS + b"!\x01"
 _SIZE_DOUBLE_BOTH = GS + b"!\x11"
 _CUT_PARTIAL = GS + b"V\x42\x00"
 
-_QR = GS + b"(k"  # QR code commands (ESC/POS function 165-182)
+_QR = GS + b"(k"  # QR code commands (ESC/POS function 65-82)
 
 
 def _qr_payload(data: bytes, fn: int, extra: bytes = b"") -> bytes:
@@ -66,23 +68,18 @@ def _qr_payload(data: bytes, fn: int, extra: bytes = b"") -> bytes:
     return _QR + bytes([len(body) % 256, len(body) // 256]) + body
 
 
-def _relative_pos(dots: int) -> bytes:
-    """ESC backslash nL nH: move the print position by dots (negative left)."""
-    value = dots & 0xFFFF
-    return ESC + b"\\" + bytes([value & 0xFF, value >> 8])
-
 _QR_CN = b"\x31"  # GS ( k code type 1 = QR code
 _BULLET = "*"  # ASCII: this printer renders only the low code page reliably
 _CHECKBOX_ON = "[x] "
 _CHECKBOX_OFF = "[ ] "
 _LIST_INDENT = "  "
 _DOTS_PER_CHAR = 12  # font A character cell width in print head dots
+_CODE_FONT_H = 11  # PIL default bitmap font glyph height
 
 _BOLD = 1
 _ITALIC = 2
 _UNDERLINE = 4
 _REVERSE = 8  # code prints white-on-black
-_STRIKE = 16  # struck text is overprinted with dashes
 
 _STYLE_COMMANDS = {
     _BOLD: (_BOLD_ON, _BOLD_OFF),
@@ -97,7 +94,7 @@ class MarkdownToEscpos:
         self.width = width
         self.encoding = encoding
         self.feed_lines = feed_lines
-        self._md = mistune.create_markdown(renderer=None, plugins=["task_lists", "strikethrough"])
+        self._md = mistune.create_markdown(renderer=None, plugins=["task_lists"])
 
     # ------------------------------------------------------------------ API
 
@@ -154,15 +151,40 @@ class MarkdownToEscpos:
             self._qr(out, url)
 
     def _qr(self, out: bytearray, url: str) -> None:
-        data = url.encode(self.encoding, errors="replace")
-        if not data:
-            return
-        out += _qr_payload(b"", 165, b"\x32\x00")  # model 2
-        out += _qr_payload(b"", 167, bytes([6]))  # module size 6
-        out += _qr_payload(b"", 169, bytes([49]))  # error correction M
-        out += _qr_payload(data, 180, b"\x30")  # store data
-        out += _qr_payload(b"", 181, b"\x30")  # print
-        out += b"\n"
+        """Print the URL as a QR code, centered on the printable width.
+
+        The native GS ( k sequence cannot be centered on clone firmwares,
+        so the QR is rendered as a GS v 0 raster bit image with a quiet
+        zone, horizontally centered over the full print head width."""
+        import qrcode
+
+        code = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=6, border=0)
+        code.add_data(url)
+        code.make(fit=True)
+        matrix = code.modules
+        size = code.modules_count
+        quiet = 4  # quiet zone in modules
+        px = (size + 2 * quiet) * 6
+        line_width = self.width * _DOTS_PER_CHAR
+        left = max((line_width - px) // 2, 0)
+        qr_img = Image.new("1", (px, px), 0)
+        draw = ImageDraw.Draw(qr_img)
+        for row in range(size):
+            for col in range(size):
+                if matrix[row][col]:
+                    x0 = (quiet + col) * 6
+                    y0 = (quiet + row) * 6
+                    draw.rectangle([x0, y0, x0 + 5, y0 + 5], fill=1)
+        img_pad = Image.new("1", (line_width, px), 0)
+        img_pad.paste(qr_img, (left, 0))
+        out += self._raster_header(img_pad)
+        out += img_pad.tobytes()
+        out += b"\n\n"
+
+    def _raster_header(self, img: Image.Image) -> bytes:
+        """GS v 0 header for a mode-1 image (bytes-per-row and height)."""
+        width_bytes = img.width // 8
+        return GS + b"v0\x00" + bytes([width_bytes % 256, width_bytes // 256, img.height % 256, img.height // 256])
 
     def _paragraph(self, token: dict, out: bytearray) -> None:
         qrs: list[str] = []
@@ -214,14 +236,47 @@ class MarkdownToEscpos:
                     self._block(child, out)
 
     def _code_block(self, token: dict, out: bytearray) -> None:
+        """Render the fenced block as one full-width raster bit image.
+
+        Reverse video (GS B) is emitted as a text-mode style, but many clone
+        firmwares (e.g. the Goojprt PT-210) only invert each glyph's own
+        bitmap, leaving spaces and padding cells white. A GS v 0 raster
+        image is the only portable way to get a solid black bar with white
+        text on such printers."""
         raw = token["raw"].rstrip("\n")
+        lines = []
         for line in raw.split("\n"):
-            for start in range(0, len(line), self.width):
+            for start in range(0, max(len(line), 1), self.width):
                 chunk = line[start : start + self.width]
-                if not chunk.strip():
-                    out += b"\n"
-                    continue
-                out += _REVERSE_ON + self._enc(chunk.ljust(self.width)) + _REVERSE_OFF + b"\n"
+                lines.append(chunk.rstrip())
+        if not lines:
+            return
+        out += self._raster_code_block(lines)
+
+    def _raster_code_block(self, lines: list[str]) -> bytes:
+        """GS v 0 payload: full-width black bar, code text punched white,
+        framed by a black row above and below for readability."""
+        px_width = self.width * _DOTS_PER_CHAR
+        px_line = _CODE_FONT_H * 2  # 12-dot font A cell doubled vertically
+        pad = 4
+        frame = 8  # thickness of the black rows around the block
+        height = len(lines) * px_line + pad * 2 + frame * 2
+        img = Image.new("1", (px_width, height), 1)
+        draw = ImageDraw.Draw(img)
+        font = ImageFont.load_default()
+        for index, text in enumerate(lines):
+            big = Image.new("1", (max(len(text), 1) * 12, px_line), 0)
+            small = Image.new("1", (max(len(text), 1) * 6, 11), 0)
+            sdraw = ImageDraw.Draw(small)
+            for col, char in enumerate(text):
+                sdraw.text((col * 6, 0), char, fill=1, font=font)
+            big = small.resize((small.width * 2, px_line), Image.NEAREST)
+            inverted = Image.eval(big, lambda v: 1 - v)
+            img.paste(inverted, (2, frame + pad + index * px_line))
+        raster = img.tobytes()
+        header = GS + b"v0\x00" + bytes([px_width // 8 % 256, px_width // 8 // 256])
+        header += bytes([height % 256, height // 256])
+        return header + raster
 
     def _separator(self, out: bytearray) -> None:
         out += self._enc("-" * self.width) + b"\n"
@@ -230,10 +285,9 @@ class MarkdownToEscpos:
 
     def _inline(self, children: list[dict], qrs: list[str] | None = None) -> list[tuple[str, int]]:
         """Flatten inline tokens to (text, style) segments with a style
-        bitmask (bold/italic/underline/reverse/strike; code uses reverse
-        video, strikethrough is drawn as a dash overprint). Links print
-        their text only; http(s) link URLs are collected into qrs for QR
-        printing. <u>/</u> inline HTML toggles underline."""
+        bitmask (bold/italic/underline/reverse; code uses reverse video).
+        Links print their text only; http(s) link URLs are collected into
+        qrs for QR printing. <u>/</u> inline HTML toggles underline."""
         segments: list[tuple[str, int]] = []
         underline = False
         for token in children:
@@ -254,9 +308,6 @@ class MarkdownToEscpos:
             elif kind == "emphasis":
                 for text, style in self._inline(token["children"], qrs):
                     segments.append((text, style | _ITALIC))
-            elif kind == "strikethrough":
-                for text, style in self._inline(token["children"], qrs):
-                    segments.append((text, style | _STRIKE))
             elif kind == "link":
                 url = token.get("attrs", {}).get("url", "")
                 if qrs is not None and re.match(r"https?://", url):
@@ -282,34 +333,16 @@ class MarkdownToEscpos:
     ) -> None:
         """line items are (word, style, preceded_by_space) tuples."""
         out += self._enc(prefix)
-        col = len(prefix)
-        total = col
-        for index, (text, style, preceded_by_space) in enumerate(line):
-            space = 1 if (index > 0 and preceded_by_space) else 0
-            total += space + len(text)
-        strike_runs: list[list[int]] = []
         style_state = 0
         for index, (text, style, preceded_by_space) in enumerate(line):
             if index > 0 and preceded_by_space:
                 out += b" "
-                col += 1
-            if style & _STRIKE:
-                if strike_runs and strike_runs[-1][1] == col:
-                    strike_runs[-1][1] = col + len(text)
-                else:
-                    strike_runs.append([col, col + len(text)])
             if style != style_state:
                 out += self._style_bytes(style_state, style)
                 style_state = style
             out += self._enc(text)
-            col += len(text)
         if style_state:
             out += self._style_bytes(style_state, 0)
-        for start, end in strike_runs:
-            out += _relative_pos(-(total - start) * _DOTS_PER_CHAR)
-            out += self._enc("-" * (end - start))
-            if total > end:
-                out += _relative_pos((total - end) * _DOTS_PER_CHAR)
         out += b"\n"
 
     @staticmethod

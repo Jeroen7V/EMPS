@@ -78,9 +78,9 @@ def test_print_test_page(client):
     assert b"\x1bE\x01" in data  # bold
     assert b"\x1b4" in data  # italic
     assert b"\x1b-\x01" in data  # underline
-    assert b"\x1dB\x01" in data  # reverse (code block full-width background)
+    assert b"\x1d\x76" + b"0\x00" in data  # raster (code block + QR code)
     assert b"\x1ba\x01" in data  # centered headings
-    assert b"https://github.com/Jeroen7V/EMPS" in data  # QR data
+    assert data.count(b"\x1d\x76" + b"0\x00") >= 2  # code block and QR images
     assert b"[x] done" in data  # task list
 
 
