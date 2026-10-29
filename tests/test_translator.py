@@ -246,7 +246,6 @@ class TestBlocks:
         assert "-" * 48 in visible(make().translate("---\n"))
 
     def test_code_block_raster_is_solid_bar_with_white_text(self):
-        import numpy as np
         from PIL import Image
 
         data = make().translate("```\necho hi\n```\n")
@@ -254,10 +253,18 @@ class TestBlocks:
         w = data[i + 4] | data[i + 5] << 8
         h = data[i + 6] | data[i + 7] << 8
         img = Image.frombytes("1", (w * 8, h), data[i + 8 : i + 8 + w * h])
-        a = np.array(img)
-        # borders and padding rows are solid black; the text area has holes
-        assert a[0].all() and a[-1].all() and a[:, 0].all() and a[:, -1].all()
-        assert not a.all()  # some pixels are white (the code text)
+        px = img.load()
+        # borders are solid black
+        assert all(px[x, 0] for x in range(img.width))
+        assert all(px[x, img.height - 1] for x in range(img.width))
+        assert all(px[0, y] for y in range(img.height))
+        assert all(px[img.width - 1, y] for y in range(img.height))
+        # the code text is punched white somewhere inside the bar
+        assert any(
+            px[x, y] == 0
+            for y in range(1, img.height - 1)
+            for x in range(1, img.width - 1)
+        )
 
     def test_block_quote_prefix(self):
         assert "> noted" in visible(make().translate("> noted\n"))
