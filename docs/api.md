@@ -20,7 +20,7 @@ Errors:
 ### `POST /print/test` (no body)
 
 Prints a built-in test page exercising every supported markdown feature —
-headings, bold, italic, underline, strikethrough, code, lists, task
+headings, bold, italic, underline, code, lists, task
 checkboxes, quotes, separators, and a QR code. Same response/errors as
 `/print`.
 
@@ -63,14 +63,17 @@ status.
 | `**bold**` | ESC E bold on/off |
 | `*italic*` | ESC 4 italic on/off |
 | `<u>underline</u>` | ESC `-` underline on/off (inline HTML) |
-| `~~strikethrough~~` | dash overprint via ESC `\` relative positioning (ESC/POS has no native strikethrough) |
+| `~~strikethrough~~` | unsupported: printed as plain text (`~~` markers stay literal) |
 | `` `code` `` | reverse video (white on black) |
-| fenced code blocks | full-width reverse video: every line is a black bar with white text |
-| http(s) links | printed as text plus a scannable QR code |
+| fenced code blocks | full-width raster bit image (`GS v 0`): a solid black bar with white text, framed by a black row above and below (reverse video only inverts glyphs on many clone printers) |
+| http(s) links | printed as text plus a scannable, centered QR code (rendered as a raster bit image with a quiet zone) |
 | ordered/unordered/nested lists | indented lines |
 | task list checkboxes | `[ ]` / `[x]` boxes |
 | `>` block quotes | indented |
 | `---` | full-width separator |
 
-Paper is 58 mm (32 columns) by default; text wraps automatically.
+Paper is 58 mm (32 columns) by default; text wraps automatically. Note that
+many 58 mm printers (e.g. the Goojprt PT-210) print only ~48 mm of the
+57/58 mm paper, so "full-width" bars and separators stop short of the paper
+edge — that is the printable area, not a formatting bug.
 See `emps/translator.py` for the authoritative implementation.

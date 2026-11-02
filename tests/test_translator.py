@@ -16,6 +16,8 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 from emps.translator import (
     _BOLD_OFF,
+    ESC,
+    GS,
     _BOLD_ON,
     _CENTER_OFF,
     _CENTER_ON,
@@ -114,21 +116,31 @@ class TestInline:
         assert _UNDERLINE_ON + b"line" in data
         assert _UNDERLINE_OFF + b"here" in data
 
-    def test_strikethrough_is_struck_not_blacked_out(self):
-        data = make().translate("a ~~gone~~ here\n")
-        assert _REVERSE_ON not in data
-        assert b"gone" in data
-        # a dash overprint is drawn over the struck word
-        assert b"----" in data
+    def test_strikethrough_renders_as_plain_text(self):
+        # Strikethrough is unsupported: without the mistune plugin the
+        # ~~ markers stay literal and the text prints unchanged.
+        text = visible(make().translate("a ~~gone~~ here\n"))
+        assert "gone" in text
+        assert b"----" not in make().translate("a ~~gone~~ here\n")
 
     def test_codespan_reverse_video(self):
         data = make().translate("order `extra` now\n")
         assert _REVERSE_ON + b"extra" in data
         assert _REVERSE_OFF + b"now" in data
 
-    def test_code_block_reverse_video_full_width(self):
+    def test_code_block_printed_as_raster_image(self):
+        # GS B reverse video only inverts glyphs on many clone printers
+        # (spaces/padding stay white), so code blocks are drawn as a GS v 0
+        # raster bit image: a solid black bar with the text punched white.
         data = make().translate("```\necho hi\n```\n")
-        assert _REVERSE_ON + b"echo hi".ljust(48) + _REVERSE_OFF in data
+        assert data.find(GS + b"v0\x00") > 0
+        assert _REVERSE_ON not in data
+        # decodable raster: width in bytes and height match the payload size
+        i = data.index(GS + b"v0\x00")
+        w = data[i + 4] | data[i + 5] << 8
+        h = data[i + 6] | data[i + 7] << 8
+        assert len(data) >= i + 8 + w * h
+        assert w * 8 == 48 * 12  # full width: columns x dots per character
 
     def test_combined_styles(self):
         data = make().translate("**bold *and italic***\n")
@@ -141,21 +153,55 @@ class TestInline:
 
     def test_link_prints_text_not_url(self):
         data = make().translate("see [docs](https://example.com)\n")
-        # the printed line has the link text; the URL appears only in QR data
+        # the printed line has the link text; the URL is encoded in the QR image
         assert visible(data).splitlines()[0] == "see docs"
-        assert b"https://example.com" in data
+        assert b"https://example.com" not in visible(data).encode("cp437")
 
     def test_non_http_link_gets_no_qr(self):
         data = make().translate("mail [me](mailto:a@b.c)\n")
-        assert b"(k" not in data
+        assert GS + b"v0\x00" not in data
 
-    def test_qr_command_sequence(self):
-        from emps.translator import _qr_payload
+    def test_qr_printed_as_centered_raster_image(self):
+        from PIL import Image
 
         data = make().translate("[x](http://e.com)\n")
-        assert _qr_payload(b"", 165, b"\x32\x00") in data  # model 2
-        assert _qr_payload(b"http://e.com", 180, b"\x30") in data  # store data
-        assert _qr_payload(b"", 181, b"\x30") in data  # print
+        assert GS + b"v0\x00" in data  # QR is a raster bit image
+        i = data.index(GS + b"v0\x00")
+        w = data[i + 4] | data[i + 5] << 8
+        h = data[i + 6] | data[i + 7] << 8
+        img = Image.frombytes("1", (w * 8, h), data[i + 8 : i + 8 + w * h])
+        assert img.width == 48 * 12  # full print head width
+        px = img.load()
+        xs = [x for x in range(img.width) for y in range(img.height) if px[x, y]]
+        # horizontally centered: ink spans symmetrically around the middle
+        middle = img.width / 2
+        assert abs((min(xs) + max(xs)) / 2 - middle) <= 2
+        # there is a quiet zone (white margin) left and right of the code
+        assert min(xs) > 0 and max(xs) < img.width - 1
+
+    def test_qr_raster_is_decodable(self):
+        from PIL import Image
+
+        data = make().translate("[x](http://e.com)\n")
+        i = data.index(GS + b"v0\x00")
+        w = data[i + 4] | data[i + 5] << 8
+        h = data[i + 6] | data[i + 7] << 8
+        img = Image.frombytes("1", (w * 8, h), data[i + 8 : i + 8 + w * h])
+        try:
+            from pyzbar.pyzbar import decode
+
+            assert any("http://e.com" in str(r.data) for r in decode(img))
+        except ImportError:
+            # pyzbar is optional; assert plausible QR geometry instead:
+            # ink spans a square region of whole 6-px modules with a quiet zone
+            px = img.load()
+            xs = [x for x in range(img.width) for y in range(img.height) if px[x, y]]
+            ys = [y for y in range(img.height) for x in range(img.width) if px[x, y]]
+            span_x = max(xs) - min(xs) + 1
+            span_y = max(ys) - min(ys) + 1
+            assert span_x == span_y
+            assert span_x % 6 == 0
+            assert span_x >= 21 * 6  # at least a version-1 QR code
 
     def test_spacing_is_preserved_between_styles(self):
         assert visible(make().translate("a *side*:\n")).strip() == "a side:"
@@ -216,8 +262,26 @@ class TestBlocks:
     def test_thematic_break_is_full_width(self):
         assert "-" * 48 in visible(make().translate("---\n"))
 
-    def test_code_block_spans_full_width(self):
-        assert "echo hi".ljust(48) in visible(make().translate("```\necho hi\n```\n"))
+    def test_code_block_raster_is_solid_bar_with_white_text(self):
+        from PIL import Image
+
+        data = make().translate("```\necho hi\n```\n")
+        i = data.index(GS + b"v0\x00")
+        w = data[i + 4] | data[i + 5] << 8
+        h = data[i + 6] | data[i + 7] << 8
+        img = Image.frombytes("1", (w * 8, h), data[i + 8 : i + 8 + w * h])
+        px = img.load()
+        # borders are solid black
+        assert all(px[x, 0] for x in range(img.width))
+        assert all(px[x, img.height - 1] for x in range(img.width))
+        assert all(px[0, y] for y in range(img.height))
+        assert all(px[img.width - 1, y] for y in range(img.height))
+        # the code text is punched white somewhere inside the bar
+        assert any(
+            px[x, y] == 0
+            for y in range(1, img.height - 1)
+            for x in range(1, img.width - 1)
+        )
 
     def test_block_quote_prefix(self):
         assert "> noted" in visible(make().translate("> noted\n"))

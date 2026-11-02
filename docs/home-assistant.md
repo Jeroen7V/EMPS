@@ -133,7 +133,7 @@ Authorization: Bearer <token>` to the `rest_command`.
 ## Markdown subset supported
 
 Headings (`#`, `##`, `###` — centered), bold, italic, `<u>underline</u>`
-(inline HTML), `~~strikethrough~~` (struck through with a dash overprint),
+(inline HTML),
 http(s) links (printed as text plus a scannable QR code), ordered/unordered/
 nested lists, task list checkboxes (`- [ ]` / `- [x]`), block quotes, fenced
 code blocks (printed as full-width black bars), and `---` separators. Paper is
