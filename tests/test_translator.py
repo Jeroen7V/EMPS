@@ -99,6 +99,13 @@ class TestHeadings:
         lines = visible(data).splitlines()
         assert max(len(line) for line in lines) <= 24
 
+    def test_heading_separated_by_single_blank_line(self):
+        lines = visible(make().translate("before\n\n# Title\n\nafter\n")).splitlines()
+        content = [line for line in lines if line]
+        assert content == ["before", "Title", "after"]
+        assert lines.index("Title") - lines.index("before") == 2
+        assert lines.index("after") - lines.index("Title") == 2
+
 
 class TestInline:
     def test_bold(self):

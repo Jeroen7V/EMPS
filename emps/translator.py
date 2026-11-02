@@ -124,7 +124,7 @@ class MarkdownToEscpos:
         elif kind == "block_quote":
             self._quote(token, out)
         elif kind == "blank_line":
-            pass  # spacing is emitted per block instead
+            return  # the previous block's trailing newline is the single blank line
         elif "raw" in token:  # html and other raw blocks: print the text
             self._text(token["raw"].strip(), out)
         out += b"\n"  # one blank line after every block
