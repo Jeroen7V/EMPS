@@ -14,7 +14,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import EmpsConfigEntry
+from . import EmpsConfigEntry, entry_display_name
 from .const import PRINTER_STATE_ERROR, PRINTER_STATE_OK
 from .coordinator import EmpsCoordinator
 from .entity import EmpsDeviceEntity
@@ -27,7 +27,7 @@ async def async_setup_entry(
 ) -> None:
     """Add all EMPS sensors."""
     coordinator: EmpsCoordinator = entry.runtime_data
-    name = f"EMPS {entry.data['host']}"
+    name = entry_display_name(entry)
     async_add_entities(
         [
             EmpsPrinterStatusSensor(coordinator, name),

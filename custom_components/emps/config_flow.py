@@ -25,7 +25,9 @@ from .api import (
     EmpsApiError,
 )
 from .const import (
+    CONF_NAME,
     CONF_POLL_INTERVAL,
+    DEFAULT_NAME,
     DEFAULT_POLL_INTERVAL,
     DOMAIN,
     MAX_POLL_INTERVAL,
@@ -34,6 +36,7 @@ from .const import (
 
 STEP_USER_SCHEMA = vol.Schema(
     {
+        vol.Required(CONF_NAME, default=DEFAULT_NAME): str,
         vol.Required(CONF_HOST): str,
         vol.Required(CONF_PORT, default=8000): int,
         vol.Optional(CONF_TOKEN): str,
@@ -72,7 +75,7 @@ class EmpsConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors["base"] = "cannot_connect"
             else:
                 return self.async_create_entry(
-                    title=f"EMPS {user_input[CONF_HOST]}",
+                    title=user_input[CONF_NAME],
                     data=user_input,
                 )
         return self.async_show_form(
@@ -94,20 +97,30 @@ class EmpsOptionsFlow(OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Manage the options."""
+        """Manage the display name and poll interval."""
         errors: dict[str, str] = {}
         if user_input is not None:
             interval = user_input[CONF_POLL_INTERVAL]
+            name = user_input[CONF_NAME].strip()
             if not MIN_POLL_INTERVAL <= interval <= MAX_POLL_INTERVAL:
                 errors["base"] = "invalid_poll_interval"
+            elif not name:
+                errors[CONF_NAME] = "invalid_name"
             else:
+                self.hass.config_entries.async_update_entry(
+                    self.config_entry, title=name
+                )
                 return self.async_create_entry(title="", data=user_input)
+        current_name = self.config_entry.options.get(
+            CONF_NAME, self.config_entry.data.get(CONF_NAME, DEFAULT_NAME)
+        )
         current = self.config_entry.options.get(
             CONF_POLL_INTERVAL,
             self.config_entry.data.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL),
         )
         schema = vol.Schema(
             {
+                vol.Required(CONF_NAME, default=current_name): str,
                 vol.Required(
                     CONF_POLL_INTERVAL, default=current, description="Poll interval (s)"
                 ): int,

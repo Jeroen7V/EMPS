@@ -22,6 +22,8 @@ from .api import (
     EmpsApiPrinterError,
 )
 from .const import (
+    CONF_HOST,
+    CONF_NAME,
     CONF_POLL_INTERVAL,
     DEFAULT_POLL_INTERVAL,
     DOMAIN,
@@ -50,6 +52,14 @@ def _client_for(hass: HomeAssistant, entry: ConfigEntry) -> EmpsApiClient:
         entry.data[CONF_HOST],
         entry.data[CONF_PORT],
         entry.data.get(CONF_TOKEN),
+    )
+
+
+def entry_display_name(entry: ConfigEntry) -> str:
+    """The configured display name, falling back to the legacy host-based one."""
+    return entry.options.get(
+        CONF_NAME,
+        entry.data.get(CONF_NAME, f"EMPS {entry.data[CONF_HOST]}"),
     )
 
 
