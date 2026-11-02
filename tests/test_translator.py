@@ -107,6 +107,58 @@ class TestHeadings:
         assert lines.index("after") - lines.index("Title") == 2
 
 
+class TestBlockSpacing:
+    @staticmethod
+    def _lines(md: str) -> list[str]:
+        return visible(make().translate(md)).splitlines()
+
+    def test_single_blank_line_around_each_block_type(self):
+        # code blocks are raster images (binary payload), covered separately below
+        for md in [
+            "before\n\n> quoted\n\nafter\n",
+            "before\n\n---\n\nafter\n",
+            "before\n\n- one\n- two\n\nafter\n",
+        ]:
+            lines = self._lines(md)
+            content = [line for line in lines if line]
+            assert content[0] == "before" and content[-1] == "after", md
+            assert lines.index("after") - lines.index("before") == len(content) + 1, md
+
+    def test_single_blank_line_between_two_code_blocks(self):
+        data = make().translate("```\na\n```\n\n```\nb\n```\n\nafter\n")
+        first = data.index(GS + b"v0\x00")
+        w1 = data[first + 4] | data[first + 5] << 8
+        h1 = data[first + 6] | data[first + 7] << 8
+        second = data.index(GS + b"v0\x00", first + 8 + w1 * h1)
+        # exactly one blank line between the raster payloads
+        assert data[first + 8 + w1 * h1 : second] == b"\n\n"
+
+    def test_single_blank_line_after_qr_code(self):
+        data = make().translate("see [docs](https://example.com)\n\nafter\n")
+        i = data.index(GS + b"v0\x00")
+        w = data[i + 4] | data[i + 5] << 8
+        h = data[i + 6] | data[i + 7] << 8
+        tail = data[i + 8 + w * h :]
+        assert tail.startswith(b"\n\nafter")  # QR newline + block newline = one blank line
+
+    def test_nested_block_in_list_has_single_blank_line_after(self):
+        lines = self._lines("- item\n\n  ## Head\n\nafter\n")
+        content = [line for line in lines if line]
+        assert content == ["* item", "Head", "after"]
+        assert lines.index("after") - lines.index("Head") == 2
+
+    def test_nested_block_in_quote_has_single_blank_line_after(self):
+        lines = self._lines("> - a\n> - b\n\nafter\n")
+        content = [line for line in lines if line]
+        assert content[-2:] == ["* b", "after"] or content == ["> a", "* b", "after"]
+        assert lines.index("after") - lines.index(content[-2]) == 2
+
+    def test_no_blank_line_before_end_feed(self):
+        data = make().translate("text\n")
+        cut = data.index(_CUT_PARTIAL)
+        assert data[:cut].endswith(b"text\n" + b"\n" * 3)
+
+
 class TestInline:
     def test_bold(self):
         data = make().translate("**bold** text\n")
