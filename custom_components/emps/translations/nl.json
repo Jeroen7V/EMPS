@@ -5,6 +5,7 @@
         "title": "Verbind met EMPS",
         "description": "Geef het adres van de EMPS-printservice op.",
         "data": {
+          "name": "Naam",
           "host": "Host",
           "port": "Poort",
           "token": "Bearer-token (optioneel, alleen als EMPS_AUTH_TOKEN is ingesteld)"
@@ -24,11 +25,13 @@
       "init": {
         "title": "EMPS-opties",
         "data": {
+          "name": "Naam",
           "poll_interval": "Health-pollinterval in seconden (30-3600)"
         }
       }
     },
     "error": {
+      "invalid_name": "Naam mag niet leeg zijn",
       "invalid_poll_interval": "Pollinterval moet tussen 30 en 3600 seconden liggen"
     }
   }

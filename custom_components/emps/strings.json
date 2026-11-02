@@ -5,6 +5,7 @@
         "title": "Connect to EMPS",
         "description": "Enter the address of the EMPS markdown printing service.",
         "data": {
+          "name": "Name",
           "host": "Host",
           "port": "Port",
           "token": "Bearer token (optional, only if EMPS_AUTH_TOKEN is set on the service)"
@@ -24,11 +25,13 @@
       "init": {
         "title": "EMPS options",
         "data": {
+          "name": "Name",
           "poll_interval": "Health poll interval in seconds (30-3600)"
         }
       }
     },
     "error": {
+      "invalid_name": "Name must not be empty",
       "invalid_poll_interval": "Poll interval must be between 30 and 3600 seconds"
     }
   }

@@ -14,9 +14,11 @@ There are two ways to use EMPS from Home Assistant:
 1. Settings > Marketplace, search for **EMPS**.
 2. Download/install the integration.
 3. Settings > Devices & Services > Add Integration > **EMPS**.
-4. Enter the host/port of the EMPS service (and the bearer token if
-   `EMPS_AUTH_TOKEN` is set on the service). Setup validates the connection
-   against `GET /health`.
+4. Enter a **name** for the printer (default: `EMPS Printer`), plus the
+   host/port of the EMPS service (and the bearer token if
+   `EMPS_AUTH_TOKEN` is set on the service). The name becomes the config
+   entry title and the device/entity names, so multiple printers stay
+   recognizable. Setup validates the connection against `GET /health`.
 
 ### Older installs (classic HACS)
 
@@ -40,7 +42,9 @@ The EMPS service itself must be running somewhere reachable from HA — see
 - Service actions (usable from automations, scripts, and dashboards):
   - `emps.print_markdown` — fields: printer (config entry), markdown text.
   - `emps.print_test_page` — field: printer.
-- An options flow (poll interval, 30–3600 s) and redacted diagnostics.
+- An options flow (rename the device, poll interval 30–3600 s) and redacted
+  diagnostics. Renaming updates the config entry title and all entity names
+  on reload.
 
 ### Usage examples
 

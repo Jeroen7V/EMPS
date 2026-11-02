@@ -11,7 +11,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .api import EmpsApiPrinterError
-from . import EmpsConfigEntry
+from . import EmpsConfigEntry, entry_display_name
 from .coordinator import EmpsCoordinator
 from .entity import EmpsDeviceEntity
 
@@ -23,7 +23,7 @@ async def async_setup_entry(
 ) -> None:
     """Add the test page button."""
     coordinator: EmpsCoordinator = entry.runtime_data
-    name = f"EMPS {entry.data['host']}"
+    name = entry_display_name(entry)
     async_add_entities([EmpsTestPageButton(coordinator, name)])
 
 
