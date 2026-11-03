@@ -146,10 +146,12 @@ class MarkdownToEscpos:
             (text, style | _BOLD) for text, style in self._inline(token["children"], qrs)
         ]
         wrap_width = self.width // 2 if level == 1 else self.width
-        out += _CENTER_ON
+        if level <= 2:
+            out += _CENTER_ON
         for line in self._wrap(segments, wrap_width):
             self._emit_line(line, out, "")
-        out += _CENTER_OFF
+        if level <= 2:
+            out += _CENTER_OFF
         if level <= 2:
             out += _SIZE_NORMAL
         for url in qrs:

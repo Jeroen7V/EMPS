@@ -92,6 +92,13 @@ class TestHeadings:
         assert _SIZE_DOUBLE_BOTH not in data and _SIZE_DOUBLE_HEIGHT not in data
         assert b"Small" in data
 
+    def test_h3_is_left_aligned(self):
+        data = make().translate("### Small\n")
+        assert _CENTER_ON not in data and _CENTER_OFF not in data
+        # h1/h2 stay centered
+        assert _CENTER_ON in make().translate("# Title\n")
+        assert _CENTER_ON in make().translate("## Sub\n")
+
     def test_h1_wrap_width_is_halved(self):
         text = "Heading that is way too long for twenty four characters"
         data = make().translate(f"# {text}\n")
