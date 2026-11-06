@@ -102,14 +102,16 @@ class MarkdownToEscpos:
         """Convert a markdown document to ESC/POS bytes, ending with a cut."""
         out = bytearray(_INIT)
         for token in self._md(markdown):
-            self._block(token, out)
+            self._block(token, out, top=True)
+        if out.endswith(b"\n"):
+            del out[-1]  # no blank line between the last block and the feed
         out += b"\n" * self.feed_lines
         out += _CUT_PARTIAL
         return bytes(out)
 
     # ---------------------------------------------------------------- blocks
 
-    def _block(self, token: dict, out: bytearray) -> None:
+    def _block(self, token: dict, out: bytearray, top: bool = False) -> None:
         kind = token["type"]
         if kind == "heading":
             self._heading(token, out)
@@ -124,10 +126,13 @@ class MarkdownToEscpos:
         elif kind == "block_quote":
             self._quote(token, out)
         elif kind == "blank_line":
-            pass  # spacing is emitted per block instead
+            if not top:
+                out += b"\n"  # blank line between blocks inside a quote/list item
+            return  # at top level the previous block's trailing newline is the single blank line
         elif "raw" in token:  # html and other raw blocks: print the text
             self._text(token["raw"].strip(), out)
-        out += b"\n"  # one blank line after every block
+        if top:
+            out += b"\n"  # one blank line after every top-level block
 
     def _heading(self, token: dict, out: bytearray) -> None:
         level = token.get("attrs", {}).get("level", 1)
@@ -141,10 +146,12 @@ class MarkdownToEscpos:
             (text, style | _BOLD) for text, style in self._inline(token["children"], qrs)
         ]
         wrap_width = self.width // 2 if level == 1 else self.width
-        out += _CENTER_ON
+        if level <= 2:
+            out += _CENTER_ON
         for line in self._wrap(segments, wrap_width):
             self._emit_line(line, out, "")
-        out += _CENTER_OFF
+        if level <= 2:
+            out += _CENTER_OFF
         if level <= 2:
             out += _SIZE_NORMAL
         for url in qrs:
@@ -179,7 +186,7 @@ class MarkdownToEscpos:
         img_pad.paste(qr_img, (left, 0))
         out += self._raster_header(img_pad)
         out += img_pad.tobytes()
-        out += b"\n\n"
+        out += b"\n"
 
     def _raster_header(self, img: Image.Image) -> bytes:
         """GS v 0 header for a mode-1 image (bytes-per-row and height)."""
@@ -252,6 +259,7 @@ class MarkdownToEscpos:
         if not lines:
             return
         out += self._raster_code_block(lines)
+        out += b"\n"  # terminate the raster's last row; the block adds the blank line
 
     def _raster_code_block(self, lines: list[str]) -> bytes:
         """GS v 0 payload: full-width black bar, code text punched white,
